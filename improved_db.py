@@ -49,7 +49,8 @@ class ImprovedDb(object):
         cur = connect.cursor() if not dictcursor else connect.cursor(pymysql.cursors.DictCursor)
         return cur
 
-    def db_query(self, cur, query, args=(), return_one=False, exec_many=False, pool=False):
+    @staticmethod
+    def db_query(self, cur, query, args=(), return_one=False, exec_many=False, err_exit=False):
         """
         return_one: if only want one row of the result
         exec_many: if want use pymysql's executemany() method 是否执行多行插入
@@ -66,7 +67,10 @@ class ImprovedDb(object):
                 return (res[0] if res else None) if return_one else res
         except Exception as err:
             print('Query Error: {}'.format(err))
-            raise
+            if err_exit:
+                exit(11)
+            else:
+                raise
 
     def create_connection_pool(self):
         """
