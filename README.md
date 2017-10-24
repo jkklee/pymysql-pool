@@ -58,7 +58,7 @@ cursor = connect.cursor()
 sql_1 = "select * from user"
 res_1 = db.db_query(cursor, sql_1, err_exit=True)  # db object will process the exceptions for you(print error message and exit)
 
-sql_2 = "insert into user values (%s,%s,%s)"
+sql_2 = "insert into user values (%s, %s, %s)"
 value_list = [('x','x','x'), ('x','x','x'), ('x','x','x')]
 try:
     res_2 = db.db_query(cursor, sql_2, value_list, return_one=True, exec_many=True)  # process exceptions yourself
