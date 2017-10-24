@@ -50,11 +50,11 @@ class ImprovedDb(object):
         return cur
 
     @staticmethod
-    def db_query(self, cur, query, args=(), return_one=False, exec_many=False, err_exit=False):
+    def db_query(cur, query, args=(), return_one=False, exec_many=False, err_exit=False):
         """
-        return_one: if only want one row of the result
-        exec_many: if want use pymysql's executemany() method 是否执行多行插入
-        pool: if want use connection pool
+        return_one: whether want only one row of the result
+        exec_many: whether use pymysql's executemany() method
+        err_exit: whether exit when occur exception(single-thread mode use)
         """
         try:
             if exec_many:
