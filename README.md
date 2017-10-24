@@ -1,7 +1,7 @@
 # PyMySQL_Connection_Pool
 A simple connection pool based PyMySQL. Compatible with single thread mode and multi threads mode
 
-When we use pymysql with python multi threads, generally will face the questions:  
+When use pymysql with python multi threads, generally we will face the questions:
 1. It can't share a connection created by main thread with all sub-threads.
 2. If we make every sub-thread create a connection and close it when this sub-thread end, that's obviously waste.
 
@@ -61,7 +61,7 @@ res_1 = db.db_query(cursor, sql_1, err_exit=True)  # db object will process the 
 sql_2 = "insert into user values (%s,%s,%s)"
 value_list = [('x','x','x'), ('x','x','x'), ('x','x','x')]
 try:
-    res_2 = db.db_query(cursor, sql_2, return_one=True, exec_many=True)  # process exceptions yourself
+    res_2 = db.db_query(cursor, sql_2, value_list, return_one=True, exec_many=True)  # process exceptions yourself
 except Exception as err:
     print(str(err))
     # do some other process
