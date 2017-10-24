@@ -8,7 +8,7 @@ warnings.filterwarnings('error', category=pymysql.err.Warning)
 
 class ImprovedDb(object):
     """
-    数据库基本类
+    A improved database class based PyMySQL.
     db_config: database config information
     connection_pool: if use connection pool
     pool_max_size: max number of connection pool
