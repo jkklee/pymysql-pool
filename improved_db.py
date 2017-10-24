@@ -9,7 +9,7 @@ warnings.filterwarnings('error', category=pymysql.err.Warning)
 class ImprovedDb(object):
     """
     A improved database class based PyMySQL.
-    db_config: database config information
+    db_config: database config information, should be a dict
     connection_pool: if use connection pool
     pool_max_size: max number of connection pool
     """
