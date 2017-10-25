@@ -23,7 +23,7 @@ class ImprovedDb(object):
             self.POOL_HARD_LIMIT = 1000
             self.POOL_INCR_STEP = 20
             self.pool_init_size = pool_init_size
-            self.pool = queue.Queue()
+            self.pool = queue.Queue(self.POOL_HARD_LIMIT)
 
     def connect(self, recreate=False):
         """
