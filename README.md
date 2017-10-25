@@ -12,7 +12,8 @@ So I implement this python class aimed at create as least connections with MySQL
 **Note:** This class dose not process exception, it will throw exceptions to it's caller
 
 ### multi-threads mode:  
-In this mode, developer should take care of the exceptions in "create connection", "get connection from pool", and "execute query" phases and process them, so that we can know which sub-thread(sub-task) exit unexpected.   
+In this mode, developer should take care of the exceptions in "create connection", "get connection from pool", and "execute query" phases and process them, so that we can know which sub-thread(sub-task) exit unexpected. 
+
 This example use `execute_query_multiplex()` method, it will automate "get a connection from pool", "create specified type of cursor", "close cursor" and "return connection back to pool" (when need then get, when finish then return).
 ```
 import concurrent.futures
@@ -20,22 +21,18 @@ from sys import exit
 from improved_db import ImprovedDb
 
 config={'host'='xxxx', 'user'='xxx', 'password'='xxx', 'database'='xxx', 'antocomit'=True}
-MAX_THREAD = 10
+MAX_THREAD = 10  #the max threads number expected
 
 db = ImprovedDb(config, connection_pool=True, pool_init_size=MAX_THREAD)
+# NOTE ===============
+# It's worth thinking about the pool_init_size parameter (default 10), 
+# if the unit task processed fast, we can set a small number (or ignore it) to take most advantage of the multiplexing; 
+# if the unit task take long, we may prefer to set a appropriate large number (depend the capacity of MySQL).
+# ====================
 db.create_pool()
 
 def task(parm):
     """suppose parm is user's uid"""
-    """
-    try: 
-        connect = db.pool_get_connection()
-    except Exception as err:
-        print('Error: uid {}, can't get connection from pool. {}'.format(parm, err))
-        exit(10)
-    cursor = db.get_conn_cur(connect, dictcursor=True)   
-    """
-    
     sql = "select * from user where uid=%s"
     try:
         res = db.execute_query_multiplex(db.pool_get_connection(), sql, parm, dictcursor=True, return_one=True)
@@ -51,22 +48,23 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREAD) as tp:
 ```
 
 ### single-thread mode
-**Note:** in this mode, 
+**Note:** This mode is simple, just use the high level method offer by the class then programing normally.
 ```
 config={'host'='xxxx', 'user'='xxx', 'password'='xxx', 'database'='xxx', 'antocomit'=True}
 db = ImprovedDb(config)
-connect = db.connect()
-cursor = connect.cursor()
+cursor = db.connect(cursor=1, dictcursor=1)
 
 sql_1 = "select * from user"
-res_1 = db.execute_query(cursor, sql_1, err_exit=True)
+res_1 = db.execute_query(cursor, sql_1)
 
 sql_2 = "insert into user values (%s, %s, %s)"
 value_list = [('x','x','x'), ('x','x','x'), ('x','x','x')]
 try:
     '''process exceptions yourself'''
-    res_2 = db.execute_query(cursor, sql_2, value_list, return_one=True, exec_many=True)
+    # use exec_many parameter
+    res_2 = db.execute_query(cursor, sql_2, value_list, return_one=1, exec_many=1)
 except Exception as err:
     print(str(err))
-    # do some other process
+    
+    # do something else
 ```
