@@ -15,9 +15,9 @@ class ImprovedDb(object):
     A improved database class based PyMySQL.
     db_config: database config information, should be a dict
     pool: if use connection pool
-    pool_init_size: init number of connection pool
+    pool_init_size: init number of connection pool(default:20)
     """
-    def __init__(self, db_config, pool=False, pool_init_size=10):
+    def __init__(self, db_config, pool=False, pool_init_size=20):
         self.db_config = db_config
         if pool:
             self.POOL_HARD_LIMIT = 1000
@@ -25,27 +25,23 @@ class ImprovedDb(object):
             self.pool_init_size = pool_init_size
             self.pool = queue.Queue(self.POOL_HARD_LIMIT)
 
-    def connect(self, recreate=False):
+    def connect(self, cursor=False, dictcursor=False, recreate=False):
         """
-        Create and return a MySQL connection object.
+        Create and return a MySQL connection object or cursor object.
+        cursor: if want cursor object
+        dictcursor: cursor type is tuple(default) or dict
         recreate: just a flag can show more information,
                   indicate if the 'create connection' action due to lack of useable connection in the pool
         """
         if recreate: print('Warning: Create a new connection')
         try:
-            connection = pymysql.connect(**self.db_config)
-            return connection
+            conn = pymysql.connect(**self.db_config)
+            if not cursor:
+                return conn
+            else:
+                return conn.cursor() if not dictcursor else conn.cursor(pymysql.cursors.DictCursor)
         except Exception:
             raise
-
-    @staticmethod
-    def create_cursor(connection, dictcursor=False):
-        """
-        Return the given connection's cursor.
-        dictcursor: cursor type is tuple(default) or dict
-        """
-        cur = connection.cursor() if not dictcursor else connection.cursor(pymysql.cursors.DictCursor)
-        return cur
 
     @staticmethod
     def execute_query(cursor, query, args=(), return_one=False, exec_many=False):
@@ -88,7 +84,6 @@ class ImprovedDb(object):
             except Exception:
                 raise
             res = cursor.fetchall()
-            print('multiplex: ', cursor.connection)
             # return connection back to the pool
             self.pool_put_connection(connection)
         return (res[0] if res else None) if return_one else res
@@ -103,10 +98,10 @@ class ImprovedDb(object):
 
     def pool_get_connection(self, timeout=10):
         """
-        Multi-thread mode, sub-thread should get a connection object from the pool.
-        If a sub-thread can't get a connection object, then re-create a fixed number of connections
-        (use the smaller of pool_init_size and POOL_INCR_STEP), and put them into the pool.
-        timeout: timeout when get connection object from the pool.
+        Multi-thread mode, sub-thread should get connection object from the pool.
+        If a sub-thread can't get a connection object, then re-create a fixed number of connections,
+        use the smaller of pool_init_size and POOL_INCR_STEP), and put them into the pool.
+        timeout: timeout of get connection object from the pool.
         """
         try:
             conn = self.pool.get(timeout=timeout)
