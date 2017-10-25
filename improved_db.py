@@ -28,7 +28,6 @@ class ImprovedDb(object):
     def connect(self, recreate=False):
         """
         Create and return a MySQL connection object.
-        err_exit: if exit when occur Exception(single-thread mode use)
         recreate: just a flag can show more information,
                   indicate if the 'create connection' action due to lack of useable connection in the pool
         """
