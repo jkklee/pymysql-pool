@@ -20,8 +20,9 @@ class ImprovedDb(object):
     def __init__(self, db_config, pool=False, pool_init_size=10):
         self.db_config = db_config
         if pool:
+            self.POOL_HARD_LIMIT = 1000
+            self.POOL_INCR_STEP = 20
             self.pool_init_size = pool_init_size
-            self.pool_max_size = pool_max_size
             self.pool = queue.Queue()
 
     def connect(self, recreate=False):
@@ -95,10 +96,9 @@ class ImprovedDb(object):
 
     def create_pool(self):
         """
-        Create specified number of connections when create the pool.
-        The number is the smaller of self.pool_init_size and self.pool_max_size else.
+        Create pool_init_size connections when init the pool.
         """
-        for i in range(self.pool_init_size if self.pool_init_size < self.pool_max_size else self.pool_max_size):
+        for i in range(self.pool_init_size):
             conn = self.connect()
             self.pool.put(conn)
 
@@ -106,19 +106,19 @@ class ImprovedDb(object):
         """
         Multi-thread mode, sub-thread should get a connection object from the pool.
         If a sub-thread can't get a connection object, then re-create a fixed number of connections
-        (use the smaller of self.pool_init_size and self.pool_max_size), and put them into the pool.
+        (use the smaller of pool_init_size and POOL_INCR_STEP), and put them into the pool.
         timeout: timeout when get connection object from the pool.
         """
         try:
             conn = self.pool.get(timeout=timeout)
         except queue.Empty:
             '''create new connection at the reason of lack of pool'''
-            for i in range(self.pool_init_size if self.pool_init_size < self.pool_max_size else self.pool_max_size):
+            for i in range(self.pool_init_size if self.pool_init_size < self.POOL_INCR_STEP else self.POOL_INCR_STEP):
                 try:
                     self.pool_put_connection(self.connect(recreate=True), conn_type='new')
                 except Exception as err:
                     '''catch Exception of self.connect() method'''
-                    print('Error: during create new connection\n{}{}'.format(''*6, err))
+                    print('Error: during create new connection\n{}{}'.format(''*7, err))
                     break
             raise Exception("cat't get connection from pool")
         # caller should the take care of the availability of the connection object from the pool
