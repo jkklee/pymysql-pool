@@ -24,12 +24,13 @@ config={'host'='xxxx', 'user'='xxx', 'password'='xxx', 'database'='xxx', 'antoco
 MAX_THREAD = 10  #the max threads number expected
 
 db = ImprovedDb(config, connection_pool=True, pool_init_size=MAX_THREAD)
+db.create_pool()
+
 # NOTE ===============
 # It's worth thinking about the pool_init_size parameter (default 10), 
 # if the unit task processed fast, we can set a small number (or ignore it) to take most advantage of the multiplexing; 
 # if the unit task take long, we may prefer to set a appropriate large number (depend the capacity of MySQL).
 # ====================
-db.create_pool()
 
 def task(parm):
     """suppose parm is user's uid"""
