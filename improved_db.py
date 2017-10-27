@@ -5,9 +5,11 @@ email: chaoyuemyself@hotmail.com
 import pymysql
 import warnings
 import queue
-from sys import exit
+import logging
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
+# use logging module for easy debug
+logging.basicConfig(format='%(levelname) s:%(message)s', level=logging.INFO)
 
 
 class ImprovedDb(object):
@@ -17,11 +19,10 @@ class ImprovedDb(object):
     pool: if use connection pool
     pool_init_size: init number of connection pool(default:20)
     """
-    def __init__(self, db_config, pool=False, pool_init_size=20):
+    def __init__(self, db_config, pool=False, pool_init_size=10):
         self.db_config = db_config
         if pool:
-            self.POOL_HARD_LIMIT = 1000
-            self.POOL_INCR_STEP = 20
+            self.POOL_HARD_LIMIT = 100
             self.pool_init_size = pool_init_size
             self.pool = queue.Queue(self.POOL_HARD_LIMIT)
 
@@ -30,60 +31,66 @@ class ImprovedDb(object):
         Create and return a MySQL connection object or cursor object.
         cursor: if want cursor object
         dictcursor: cursor type is tuple(default) or dict
-        recreate: just a flag can show more information,
-                  indicate if the 'create connection' action due to lack of useable connection in the pool
+        recreate: just a flag indicate if the 'create connection' action due to lack of useable connection in the pool
         """
-        if recreate: print('Warning: Create a new connection')
         try:
             conn = pymysql.connect(**self.db_config)
+            if recreate:
+                logging.info('create new connection because of pool lacking')
+                logging.debug('create new connection because of pool lacking: {}'.format(conn))
             if not cursor:
                 return conn
             else:
                 return conn.cursor() if not dictcursor else conn.cursor(pymysql.cursors.DictCursor)
-        except Exception:
+        except Exception as err:
+            if recreate:
+                logging.error('create connection error when pool lacking: {}'.format(err))
+            else:
+                logging.error('create connection error: {}'.format(err))
             raise
 
     @staticmethod
-    def execute_query(cursor, query, args=(), return_one=False, exec_many=False):
+    def execute_query(connection, query, args=(), dictcursor=False, return_one=False, exec_many=False):
         """
         A higher level implementation for execute query.
         cursor: cursor object of a connection
         return_one: whether want only one row of the result
         exec_many: whether use pymysql's executemany() method
         """
-        try:
-            if exec_many:
-                cursor.executemany(query, args)
-            else:
-                cursor.execute(query, args)
-        except Exception:
-            raise
-        res = cursor.fetchall()
+        with connection.cursor() if not dictcursor else connection.cursor(pymysql.cursors.DictCursor) as cur:
+            try:
+                if exec_many:
+                    cur.executemany(query, args)
+                else:
+                    cur.execute(query, args)
+            except:
+                raise
+            res = cur.fetchall()
         # if no record match the query, return () if return_one==False, else return None
         return (res[0] if res else None) if return_one else res
 
     def execute_query_multiplex(self, connection, query, args=(), dictcursor=False, return_one=False, exec_many=False):
         """
         A convenience method for:
-                connection = self.connect()
-                cursor = self.create_cursor(connection)
-                self.execute_query(cursor, query, args=())
-                cursor.close()
-                self.pool_put_connection(connection)
+            connection = self.connect()
+            cursor = self.create_cursor(connection)
+            self.execute_query(cursor, query, args=())
+            cursor.close()
+            self.pool_put_connection(connection)
         connection: connection object
         dictcursor: cursor type is tuple(default) or dict
         return_one: whether want only one row of the result
         exec_many: whether use pymysql's executemany() method
         """
-        with connection.cursor() if not dictcursor else connection.cursor(pymysql.cursors.DictCursor) as cursor:
+        with connection.cursor() if not dictcursor else connection.cursor(pymysql.cursors.DictCursor) as cur:
             try:
                 if exec_many:
-                    cursor.executemany(query, args)
+                    cur.executemany(query, args)
                 else:
-                    cursor.execute(query, args)
-            except Exception:
+                    cur.execute(query, args)
+            except:
                 raise
-            res = cursor.fetchall()
+            res = cur.fetchall()
             # return connection back to the pool
             self.pool_put_connection(connection)
         return (res[0] if res else None) if return_one else res
@@ -92,31 +99,31 @@ class ImprovedDb(object):
         """
         Create pool_init_size connections when init the pool.
         """
+        logging.debug('init connection pool')
         for i in range(self.pool_init_size):
             conn = self.connect()
             self.pool.put(conn)
+        logging.debug('pool object: {}'.format(self.pool.queue))
 
-    def pool_get_connection(self, timeout=10):
+    def pool_get_connection(self, timeout=3):
         """
         Multi-thread mode, sub-thread should get connection object from the pool.
-        If a sub-thread can't get a connection object, then re-create a fixed number of connections,
-        use the smaller of pool_init_size and POOL_INCR_STEP), and put them into the pool.
-        timeout: timeout of get connection object from the pool.
+        If a sub-thread can't get a connection object, then re-create a new connections and put it into pool.
+        timeout: timeout of get connection from pool.
+            1.If unit task process fast, set a small number(or just ignore it) to take most advantage of the multiplexing;
+            2.If unit task may takes long, set a appropriate large number to reduce the errors come from pool lacking,
+              and set the pool_init_size in __init__() method as larger as your thread-pool's max_workers(also depend the capacity of MySQL)
         """
         try:
             conn = self.pool.get(timeout=timeout)
+            logging.debug('get connection: {}'.format(conn))
+            # caller should the take care of the availability of the connection object from the pool
+            return conn
         except queue.Empty:
-            '''create new connection at the reason of lack of pool'''
-            for i in range(self.pool_init_size if self.pool_init_size < self.POOL_INCR_STEP else self.POOL_INCR_STEP):
-                try:
-                    self.pool_put_connection(self.connect(recreate=True), conn_type='new')
-                except Exception as err:
-                    '''catch Exception of self.connect() method'''
-                    print('Error: during create new connection\n{}{}'.format(''*7, err))
-                    break
-            raise Exception("cat't get connection from pool")
-        # caller should the take care of the availability of the connection object from the pool
-        return conn
+            logging.warning('get connection from pool timeout')
+            # create new connection at the reason of pool lacking
+            conn = self.connect(recreate=True)
+            self.pool_put_connection(conn, conn_type='new')
 
     def pool_put_connection(self, connection, conn_type='old'):
         """
@@ -124,13 +131,15 @@ class ImprovedDb(object):
         conn_type: "new" or "old"(default) just a flag can show more information
         """
         try:
+            logging.debug('return connection: {}'.format(connection))
             self.pool.put_nowait(connection)
         except queue.Full:
             if conn_type == 'new':
-                print("Warning: Can't put new connection to pool")
+                logging.warning("can't put new connection to pool")
             else:
-                print("Warning: Can't put connection back to pool")
+                logging.warning("can't put old connection back to pool")
 
     @staticmethod
     def db_close(connection):
         connection.close()
+        logging.debug("close connection: {}".format(connection))
