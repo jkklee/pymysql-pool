@@ -53,17 +53,17 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREAD) as tp:
 ```
 config={'host'='xxxx', 'user'='xxx', 'password'='xxx', 'database'='xxx', 'antocomit'=True}
 db = ImprovedDb(config)
-cursor = db.connect(cursor=1, dictcursor=1)
+connect = db.connect()
 
 sql_1 = "select * from user"
-res_1 = db.execute_query(cursor, sql_1)
+res_1 = db.execute_query(connect, sql_1)
 
 sql_2 = "insert into user values (%s, %s, %s)"
 value_list = [('x','x','x'), ('x','x','x'), ('x','x','x')]
 try:
     '''process exceptions yourself'''
     # use exec_many parameter
-    res_2 = db.execute_query(cursor, sql_2, value_list, return_one=1, exec_many=1)
+    res_2 = db.execute_query(connect, sql_2, value_list, dictcursor=True, return_one=True, exec_many=True)
 except Exception as err:
     print(str(err))
     
