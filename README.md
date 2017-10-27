@@ -15,7 +15,7 @@ So I implement this python class aimed at create as least connections with MySQL
 In this mode, developer should take care of the exceptions in "create connection", "get connection from pool", and "execute query" phases and process them, so that we can know which sub-thread(sub-task) exit unexpected. 
 
 This example use `execute_query_multiplex()` method, it will automate "get a connection from pool", "create specified type of cursor", "close cursor" and "return connection back to pool" (when need then get, when finish then return).
-```
+```python
 import concurrent.futures
 from sys import exit
 from improved_db import ImprovedDb
@@ -50,7 +50,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREAD) as tp:
 
 ### single-thread mode
 **Note:** This mode is simple, just use the high level method offer by the class then programing normally.
-```
+```python
 config={'host'='xxxx', 'user'='xxx', 'password'='xxx', 'database'='xxx', 'antocomit'=True}
 db = ImprovedDb(config)
 connect = db.connect()
