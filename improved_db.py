@@ -9,7 +9,7 @@ import logging
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
 # use logging module for easy debug
-logging.basicConfig(format='%(levelname) s:%(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s %(levelname)8s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S', level=logging.INFO)
 
 
 class ImprovedDb(object):
