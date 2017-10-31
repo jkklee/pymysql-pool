@@ -63,7 +63,7 @@ value_list = [('x','x','x'), ('x','x','x'), ('x','x','x')]
 try:
     '''process exceptions yourself'''
     # use exec_many parameter
-    res_2 = db.execute_query(connect, sql_2, value_list, dictcursor=True, return_one=True, exec_many=True)
+    res_2 = db.execute_query(connect, sql_2, value_list, exec_many=True)
 except Exception as err:
     print(str(err))
     
