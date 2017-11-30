@@ -20,10 +20,10 @@ import concurrent.futures
 from sys import exit
 from improved_db import ImprovedDb
 
-config={'host'='xxxx', 'user'='xxx', 'password'='xxx', 'database'='xxx', 'antocomit'=True}
+config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'antocomit':True}
 MAX_THREAD = 10  #the max threads number expected
 
-db = ImprovedDb(config, connection_pool=True, pool_init_size=MAX_THREAD)
+db = ImprovedDb(config, pool=True, pool_init_size=MAX_THREAD)
 db.create_pool()
 
 # NOTE ===============
@@ -51,7 +51,7 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREAD) as tp:
 ### single-thread mode
 **Note:** This mode is simple, just use the high level method offer by the class then programing normally.
 ```python
-config={'host'='xxxx', 'user'='xxx', 'password'='xxx', 'database'='xxx', 'antocomit'=True}
+config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'antocomit':True}
 db = ImprovedDb(config)
 connect = db.connect()
 
