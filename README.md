@@ -23,8 +23,8 @@ from improved_db import ImprovedDb
 config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'antocomit':True}
 MAX_THREAD = 10  #the max threads number expected
 
-db = ImprovedDb(config, pool=True, pool_init_size=MAX_THREAD)
-db.create_pool()
+db = ImprovedDb(config)
+db.create_pool(pool_init_size=MAX_THREAD)
 
 # NOTE ===============
 # It's worth thinking about the pool_init_size parameter (default 10), 
@@ -53,19 +53,19 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREAD) as tp:
 ```python
 config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'antocomit':True}
 db = ImprovedDb(config)
-connect = db.connect()
 
 sql_1 = "select * from user"
-res_1 = db.execute_query(connect, sql_1)
+connection = db.connect()
+res_1 = db.execute_query(connection, sql_1)
 
 sql_2 = "insert into user values (%s, %s, %s)"
 value_list = [('x','x','x'), ('x','x','x'), ('x','x','x')]
 try:
     '''process exceptions yourself'''
     # use exec_many parameter
-    res_2 = db.execute_query(connect, sql_2, value_list, exec_many=True)
+    res_2 = db.execute_query(connection, sql_2, value_list, exec_many=True)
 except Exception as err:
     print(str(err))
     
-    # do something else
+# do something else
 ```
