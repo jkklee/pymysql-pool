@@ -54,8 +54,13 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_THREAD) as tp:
 config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'antocomit':True}
 db = ImprovedDb(config)
 
-sql_1 = "select * from user"
 connection = db.connect()
+# NOTE ===============
+# The db.connect() method return a <pymysql.connections.Connection object>, of course you can use it directly,
+# or use the wrapped method db.execute_query() as below.
+# ====================
+
+sql_1 = "select * from user"
 res_1 = db.execute_query(connection, sql_1)
 
 sql_2 = "insert into user values (%s, %s, %s)"
@@ -67,5 +72,5 @@ try:
 except Exception as err:
     print(str(err))
     
-# do something else
+# Do something else
 ```
