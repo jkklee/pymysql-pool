@@ -6,6 +6,7 @@ import pymysql
 import warnings
 import queue
 import logging
+import threading
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
 # use logging module for easy debug
@@ -21,6 +22,7 @@ class Connection(pymysql.connections.Connection):
         the __exit__() method additionally put the connection back to it's pool
     """
     _pool = None
+    _reusable_expection = (pymysql.err.ProgrammingError, pymysql.err.IntegrityError, pymysql.err.NotSupportedError)
 
     def __init__(self, *args, **kwargs):
         pymysql.connections.Connection.__init__(self, *args, **kwargs)
@@ -33,29 +35,25 @@ class Connection(pymysql.connections.Connection):
         Base action: on successful exit, commit. On exception, rollback
         With pool additional action: put connection back to pool
         """
-        if exc:
-            self.rollback()
-        else:
-            self.commit()
+        pymysql.connections.Connection.__exit__(self, exc, value, traceback)
         if self._pool:
-            if not exc or exc in [pymysql.err.ProgrammingError, pymysql.err.IntegrityError, pymysql.err.NotSupportedError]:
+            if not exc or exc in self._reusable_expection:
                 '''reusable connection'''
                 self._pool.put_connection(self)
             else:
                 '''no reusable connection, close it and create a new one then put it to the pool'''
-                self._pool.put_nowait(self.recreate(*self.args, **self.kwargs))
+                self._pool.put_connection(self._recreate(*self.args, **self.kwargs))
                 self._pool = None
                 try:
                     self.close()
-                    logger.warning("Close not reusable connection from {} caused by {}".format(self._pool.name, value))
+                    logger.warning("Close not reusable connection from pool({}) caused by {}".format(self._pool.name, value))
                 except Exception:
                     pass
-        else:
-            self.close()
 
-    @staticmethod
-    def recreate(*args, **kwargs):
-        return Connection(*args, **kwargs)
+    def _recreate(self, *args, **kwargs):
+        conn = Connection(*args, **kwargs)
+        logger.debug('Create new connection due to pool({}) lacking'.format(self._pool.name))
+        return conn
 
     def close(self):
         """
@@ -66,29 +64,17 @@ class Connection(pymysql.connections.Connection):
         if self._pool:
             self._pool.put_connection(self)
         else:
-            import struct
-            COM_QUIT = 0x01
-            if self._closed:
-                raise pymysql.err.Error("Already closed")
-            self._closed = True
-            if self._sock is None:
-                return
-            send_data = struct.pack('<iB', 1, COM_QUIT)
-            try:
-                self._write_bytes(send_data)
-            except Exception:
-                pass
-            finally:
-                self._force_close()
+            pymysql.connections.Connection.close(self)
 
     def execute_query(self, query, args=(), dictcursor=False, return_one=False, exec_many=False):
         """
-        A wrapped implementation of pymysql's execute() or executemany().
-        dictcursor: whether want the result is dict, default is tuple
+        A wrapped method of pymysql's execute() or executemany().
+        dictcursor: whether want use the dict cursor(cursor's default type is tuple)
         return_one: whether want only one row of the result
         exec_many: whether use pymysql's executemany() method
         """
-        with self.cursor() if not dictcursor else self.cursor(pymysql.cursors.DictCursor) as cur:
+        with self:
+            cur = self.cursor() if not dictcursor else self.cursor(pymysql.cursors.DictCursor)
             try:
                 if exec_many:
                     cur.executemany(query, args)
@@ -107,35 +93,39 @@ class ConnectionPool:
     different pool of different DB Server or different user
     """
     _HARD_LIMIT = 100
+    _THREAD_LOCAL = threading.local()
+    _THREAD_LOCAL.retry_counter = 0  # a counter used for debug get_connection() method
 
-    def __init__(self, init_size=5, name=None, *args, **kwargs):
+    def __init__(self, size=5, name=None, *args, **kwargs):
         self._pool = queue.Queue(self._HARD_LIMIT)
         self.name = name if name else '-'.join(
             [kwargs.get('host', 'localhost'), str(kwargs.get('port', 3306)),
              kwargs.get('user', ''), kwargs.get('database', '')])
-        for _ in range(init_size if init_size < self._HARD_LIMIT else self._HARD_LIMIT):
+        for _ in range(size if size < self._HARD_LIMIT else self._HARD_LIMIT):
             conn = Connection(*args, **kwargs)
             conn._pool = self
             self._pool.put(conn)
 
-    def get_connection(self, timeout=1, retry=1):
+    def get_connection(self, timeout=1, retry_times=1):
         """
         timeout: how long we will wait for this method to return a connection
         retry: when can't get a connection, the times of retry
         """
         try:
             conn = self._pool.get(timeout=timeout)
-            logger.debug('Get connection from {}'.format(self.name))
+            logger.debug('Get connection from pool({})'.format(self.name))
             return conn
         except queue.Empty:
-            logger.warning('Get connection from {} timeout'.format(self.name))
-            if retry > 0:
-                retry_times = list(range(1, retry + 1))
-                logger.debug('Retry get connection from {}, {} times'.format(self.name, retry_times.pop(0)))
-                retry -= 1
-                return self.get_connection(timeout, retry)
+            if retry_times > 0:
+                self._THREAD_LOCAL.retry_counter += 1
+                logger.debug('Retry get connection from pool({}), the {} times'.format(self.name, self._THREAD_LOCAL.retry_counter))
+                retry_times -= 1
+                return self.get_connection(timeout, retry_times)
             else:
-                raise GetConnectionFromPoolError("can't get connection from {} within {}*{} second(s)".format(self.name, timeout, retry))
+                total_times = self._THREAD_LOCAL.retry_counter + 1
+                self._THREAD_LOCAL.retry_counter = 0
+                raise GetConnectionFromPoolError("can't get connection from pool({}) within {}*{} second(s)".format(
+                    self.name, timeout, total_times))
 
     def put_connection(self, conn):
         if not conn._pool:
@@ -143,9 +133,9 @@ class ConnectionPool:
         conn.cursor().close()
         try:
             self._pool.put_nowait(conn)
-            logger.debug("Put connection back to {}".format(self.name))
+            logger.debug("Put connection back to pool({})".format(self.name))
         except queue.Full:
-            logger.warning("Put connection to {} error, pool is full, size:{}".format(self.name, self.size()))
+            logger.warning("Put connection to pool({}) error, pool is full, size:{}".format(self.name, self.size()))
 
     def size(self):
         return self._pool.qsize()
@@ -153,6 +143,3 @@ class ConnectionPool:
 
 class GetConnectionFromPoolError(Exception):
     """Exception related can't get connection from pool within timeout seconds."""
-
-
-
