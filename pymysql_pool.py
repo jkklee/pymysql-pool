@@ -106,21 +106,21 @@ class ConnectionPool:
             conn._pool = self
             self._pool.put(conn)
 
-    def get_connection(self, timeout=1, retry_times=1):
+    def get_connection(self, timeout=1, retry_num=1):
         """
-        timeout: how long we will wait for this method to return a connection
-        retry: when can't get a connection, the times of retry
+        timeout: timeout of get a connection from pool, should be a int(0 means return or raise immediately)
+        retry_num: how many times will retry to get a connection
         """
         try:
-            conn = self._pool.get(timeout=timeout)
+            conn = self._pool.get(timeout=timeout) if timeout > 0 else self._pool.get_nowait()
             logger.debug('Get connection from pool({})'.format(self.name))
             return conn
         except queue.Empty:
-            if retry_times > 0:
+            if retry_num > 0:
                 self._THREAD_LOCAL.retry_counter += 1
                 logger.debug('Retry get connection from pool({}), the {} times'.format(self.name, self._THREAD_LOCAL.retry_counter))
-                retry_times -= 1
-                return self.get_connection(timeout, retry_times)
+                retry_num -= 1
+                return self.get_connection(timeout, retry_num)
             else:
                 total_times = self._THREAD_LOCAL.retry_counter + 1
                 self._THREAD_LOCAL.retry_counter = 0
