@@ -14,7 +14,7 @@ This class provide a wrapped execute_query() method for convenience, which take 
 - `ConnectionPool`'s instance represent the real connection_pool.
 
 ## Use example
-### multi-threads/async mode:  
+### multi-threads mode:  
 The mainly difference with single-thread mode is that we should maintain the status of the pool. Such as 'get connection from pool' or 'put connection back to pool', in which case there are also some case to deal, such as: 
 - when get connection from a pool: we should deal with the **timeout** and **retry** parameters
 - when put connection back to pool: if we executed queries without exceptions, this connection can go back to pool directly; but if **exception** occurred, we should decided whether this connection should go back to pool depend on if it is **reusable**(base on the exception type). If the connection shouldn't bo back to pool, we close it and **recreate** a new connection then put it to the pool.
