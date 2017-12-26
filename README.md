@@ -67,6 +67,6 @@ pymysql_pool.GetConnectionFromPoolError: can't get connection from pool(pool1) w
 ### We can see that the module maintain the pool appropriate when(and only when) we call the close() method or use the Context Manager Protocol of connection object.
 ```
 
-**NOTE 1:** We should always use one of the close() method or Context Manager Protocol of connection object, otherwise the pool will exhaust soon.
-**NOTE 2:** The Context Manager Protocol is preferred, it can achieve the "multiplexing" similar effect.
+**NOTE 1:** We should always use one of the close() method or Context Manager Protocol of connection object, otherwise the pool will exhaust soon.  
+**NOTE 2:** The Context Manager Protocol is preferred, it can achieve the "multiplexing" similar effect.  
 **NOTE 3:** When use close() method, take care never use a connection object's close() method more than one time(you know why~).
