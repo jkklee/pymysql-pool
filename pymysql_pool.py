@@ -10,7 +10,7 @@ import threading
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
 # use logging module for easy debug
-logging.basicConfig(format='%(asctime)s %(levelname)8s: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(format='%(asctime)s %(levelname)8s: %(message)s', datefmt='%m-%d %H:%M:%S')
 logger = logging.getLogger(__name__)
 logger.setLevel('WARNING')
 
@@ -46,13 +46,13 @@ class Connection(pymysql.connections.Connection):
                 self._pool = None
                 try:
                     self.close()
-                    logger.warning("Close not reusable connection from pool({}) caused by {}".format(self._pool.name, value))
+                    logger.warning("Close not reusable connection from pool(%s) caused by %s", self._pool.name, value)
                 except Exception:
                     pass
 
     def _recreate(self, *args, **kwargs):
         conn = Connection(*args, **kwargs)
-        logger.debug('Create new connection due to pool({}) lacking'.format(self._pool.name))
+        logger.debug('Create new connection due to pool(%s) lacking', self._pool.name)
         return conn
 
     def close(self):
@@ -113,12 +113,12 @@ class ConnectionPool:
         """
         try:
             conn = self._pool.get(timeout=timeout) if timeout > 0 else self._pool.get_nowait()
-            logger.debug('Get connection from pool({})'.format(self.name))
+            logger.debug('Get connection from pool(%s)', self.name)
             return conn
         except queue.Empty:
             if retry_num > 0:
                 self._THREAD_LOCAL.retry_counter += 1
-                logger.debug('Retry get connection from pool({}), the {} times'.format(self.name, self._THREAD_LOCAL.retry_counter))
+                logger.debug('Retry get connection from pool(%s), the %d times', self.name, self._THREAD_LOCAL.retry_counter)
                 retry_num -= 1
                 return self.get_connection(timeout, retry_num)
             else:
@@ -133,9 +133,9 @@ class ConnectionPool:
         conn.cursor().close()
         try:
             self._pool.put_nowait(conn)
-            logger.debug("Put connection back to pool({})".format(self.name))
+            logger.debug("Put connection back to pool(%s)", self.name)
         except queue.Full:
-            logger.warning("Put connection to pool({}) error, pool is full, size:{}".format(self.name, self.size()))
+            logger.warning("Put connection to pool(%s) error, pool is full, size:%d", self.name, self.size())
 
     def size(self):
         return self._pool.qsize()
