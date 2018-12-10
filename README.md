@@ -14,6 +14,10 @@ This class provide a wrapped execute_query() method for convenience, which take 
 - `ConnectionPool`'s instance represent the real connection_pool.
 
 ## Use example
+### Install
+```
+pip install pymysql-pool
+```
 ### multi-threads mode:  
 The mainly difference with single-thread mode is that we should maintain the status of the pool. Such as 'get connection from pool' or 'put connection back to pool', in which case there are also some case to deal, such as: 
 - when get connection from a pool: we should deal with the **timeout** and **retry** parameters
@@ -25,12 +29,12 @@ There also can create more than one connection_pool(with distinct `ConnectionPoo
 
 In the example below, we will see how it work within connection_pool feature:   
 ```
->>> import pymysql_pool
->>> pymysql_pool.logger.setLevel('DEBUG')
+>>> import pymysqlpool
+>>> pymysqlpool.logger.setLevel('DEBUG')
 >>> config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'antocomit':True}
 
 ### Create a connection pool with 2 connection in it
->>> pool1 = pymysql_pool.ConnectionPool(size=2, name='pool1', **config)
+>>> pool1 = pymysqlpool.ConnectionPool(size=2, name='pool1', **config)
 >>> pool1.size()
 2
 >>> con1 = pool1.get_connection()
@@ -43,7 +47,7 @@ In the example below, we will see how it work within connection_pool feature:
 ### We can prophesy that here will occur some exception, because the pool1 is empty
 >>> con3 = pool1.get_connection(timeout=0, retry_num=0)
 Traceback (most recent call last):
-  File "e:\github\pymysql-connpool\pymysql_pool.py", line 115, in get_connection
+  File "e:\github\pymysql-pool\pymysqlpool.py", line 115, in get_connection
     conn = self._pool.get(timeout=timeout) if timeout > 0 else self._pool.get_nowait()
 queue.Empty
 
@@ -52,9 +56,9 @@ During handling of the above exception, another exception occurred:
 Traceback (most recent call last):
   File "<pyshell#37>", line 1, in <module>
     con3 = pool1.get_connection(timeout=0, retry_num=0)
-  File "e:\github\pymysql-connpool\pymysql_pool.py", line 128, in get_connection
+  File "e:\github\pymysql-pool\pymysqlpool.py", line 128, in get_connection
     self.name, timeout, total_times))
-pymysql_pool.GetConnectionFromPoolError: can't get connection from pool(pool1) within 0*1 second(s)
+pymysqlpool.GetConnectionFromPoolError: can't get connection from pool(pool1) within 0*1 second(s)
 
 ### Now let's see the connection's behavior when call close() method and use with Context Manager Protocol
 >>> con1.close()

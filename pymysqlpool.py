@@ -8,6 +8,8 @@ import queue
 import logging
 import threading
 
+__all__ = ['Connection', 'ConnectionPool', 'logger']
+
 warnings.filterwarnings('error', category=pymysql.err.Warning)
 # use logging module for easy debug
 logging.basicConfig(format='%(asctime)s %(levelname)8s: %(message)s', datefmt='%m-%d %H:%M:%S')
