@@ -1,5 +1,5 @@
 # PyMySQL_Connection_Pool
-A simple connection pool based PyMySQL. Mainly focus on **multi threads** or **async** mode when use `pymysql`, but also compatible with single thread mode for convenience when you need to use these two mode together. Within multi threads mode support the multiplexing similar feature(when use connection with `Context Manager Protocol`).
+A simple connection pool based PyMySQL. Mainly focus on **multi threads** mode when use `pymysql`, but also compatible with single thread mode for convenience when you need to use these two mode together. Within multi threads mode support the multiplexing similar feature(when use connection with `Context Manager Protocol`).
 
 Problem: When use pymysql with python multi threads, generally we will face the questions:
 1. It can't share a connection created by main thread with all sub-threads. It will result error like this:
