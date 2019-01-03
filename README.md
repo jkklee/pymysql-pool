@@ -31,7 +31,7 @@ In the example below, we will see how it work within connection_pool feature:
 ```
 >>> import pymysqlpool
 >>> pymysqlpool.logger.setLevel('DEBUG')
->>> config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'antocomit':True}
+>>> config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'autocommit':True}
 
 ### Create a connection pool with 2 connection in it
 >>> pool1 = pymysqlpool.ConnectionPool(size=2, name='pool1', **config)
