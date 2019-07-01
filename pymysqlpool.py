@@ -119,6 +119,8 @@ class ConnectionPool:
             logger.debug('Get connection from pool(%s)', self.name)
             return conn
         except queue.Empty:
+            if not hasattr(self._THREAD_LOCAL, 'retry_counter'):
+                self._THREAD_LOCAL.retry_counter = 0
             if retry_num > 0:
                 self._THREAD_LOCAL.retry_counter += 1
                 logger.debug('Retry get connection from pool(%s), the %d times', self.name, self._THREAD_LOCAL.retry_counter)
