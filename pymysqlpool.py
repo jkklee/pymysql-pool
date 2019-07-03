@@ -94,7 +94,7 @@ class ConnectionPool:
     put a reusable connection back to the pool, etc; also we can create different instance of this class that represent
     different pool of different DB Server or different user
     """
-    _HARD_LIMIT = 100
+    _HARD_LIMIT = 200
     _THREAD_LOCAL = threading.local()
     _THREAD_LOCAL.retry_counter = 0  # a counter used for debug get_connection() method
 
