@@ -100,11 +100,11 @@ class ConnectionPool:
 
     def __init__(self, size=5, name=None, *args, **kwargs):
         self._pool = queue.Queue(self._HARD_LIMIT)
-        self.size = size if 0 < size < self._HARD_LIMIT else self._HARD_LIMIT
+        self._size = size if 0 < size < self._HARD_LIMIT else self._HARD_LIMIT
         self.name = name if name else '-'.join(
             [kwargs.get('host', 'localhost'), str(kwargs.get('port', 3306)),
              kwargs.get('user', ''), kwargs.get('database', '')])
-        for _ in range(self.size):
+        for _ in range(self._size):
             conn = Connection(*args, **kwargs)
             conn._pool = self
             self._pool.put(conn)
