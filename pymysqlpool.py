@@ -98,7 +98,7 @@ class ConnectionPool:
     _THREAD_LOCAL = threading.local()
     _THREAD_LOCAL.retry_counter = 0  # a counter used for debug get_connection() method
 
-    def __init__(self, size=5, name=None, *args, **kwargs):
+    def __init__(self, size=10, name=None, *args, **kwargs):
         self._pool = queue.Queue(self._HARD_LIMIT)
         self._size = size if 0 < size < self._HARD_LIMIT else self._HARD_LIMIT
         self.name = name if name else '-'.join(
