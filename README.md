@@ -3,15 +3,16 @@ A simple connection pool based PyMySQL. Mainly focus on **multi threads** mode w
 
 ## Problem to solve:
 When use pymysql with python multi threads, generally we will face the questions:  
-    1. It can't share a connection created by main thread with all sub-threads. It will result error like this:
+    1. It can't share a connection created by main thread with all sub-threads. It will result error like this:  
     `pymysql.err.InternalError: Packet sequence number wrong - got 0 expected 1`  
     2. If we make every sub-thread to create a connection and close it when this sub-thread end, that's workable but obviously lead to high cost on establish connections with MySQL.
 
 So I implement this module aimed at create as least connections as possible with MySQL in multi-threads programing. 
 
+## Take a glance
 This module contain two class: 
-- `Connection` is a subclass of `pymysql.connections.Connection`, it can use with or without connection_pool, **It's usage is all the same with pymysql**. The detail(when with connection_pool, it should take additional action to maintain the pool) implement about connection pool is hiddened.  
-This class provide a wrapped execute_query() method for convenience, which take several parameters.
+- `Connection` is a subclass of `pymysql.connections.Connection`, it can use with or without connection_pool, **It's usage is all the same with pymysql**. The detail implement about connection pool is hiddened(means: when with connection_pool, it should take additional action to maintain the pool).  
+This class also provide a wrapped execute_query() method for convenience, which take several parameters.
 - `ConnectionPool`'s instance represent the real connection_pool.
 
 ## Use example
