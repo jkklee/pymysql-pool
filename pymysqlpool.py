@@ -109,13 +109,16 @@ class ConnectionPool:
             conn._pool = self
             self._pool.put(conn)
 
-    def get_connection(self, timeout=1, retry_num=1):
+    def get_connection(self, timeout=1, retry_num=1, pre_ping=False):
         """
         timeout: timeout of get a connection from pool, should be a int(0 means return or raise immediately)
         retry_num: how many times will retry to get a connection
+        pre_ping: before return a connection, send a ping command to the Mysql server via it, if the connection is broken, reconnect it
         """
         try:
             conn = self._pool.get(timeout=timeout) if timeout > 0 else self._pool.get_nowait()
+            if pre_ping:
+                conn.ping(reconnect=True)
             logger.debug('Get connection from pool(%s)', self.name)
             return conn
         except queue.Empty:
