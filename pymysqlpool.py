@@ -38,24 +38,19 @@ class Connection(pymysql.connections.Connection):
         With pool additional action: put connection back to pool
         """
         pymysql.connections.Connection.__exit__(self, exc, value, traceback)
-        if self._pool:
+        if self._pool is not None:
             if not exc or exc in self._reusable_expection:
                 '''reusable connection'''
                 self._pool.put_connection(self)
             else:
-                '''no reusable connection, close it and create a new one then put it to the pool'''
-                self._pool.put_connection(self._recreate(*self.args, **self.kwargs))
-                self._pool = None
+                '''no reusable connection, close it and create a new one put to the pool'''
                 try:
                     self.close()
-                    logger.warning("Close not reusable connection from pool(%s) caused by %s", self._pool.name, value)
+                    logger.warning("Close not reusable connection in pool(%s) caused by %s", self._pool.name, value)
                 except Exception:
                     pass
-
-    def _recreate(self, *args, **kwargs):
-        conn = Connection(*args, **kwargs)
-        logger.debug('Create new connection due to pool(%s) lacking', self._pool.name)
-        return conn
+                logger.debug('Create new connection in pool(%s) due to connection broken', self._pool.name)
+                self._pool.put_connection(Connection(*self._args, **self.kwargs))
 
     def close(self):
         """
@@ -63,10 +58,38 @@ class Connection(pymysql.connections.Connection):
         With pool, put connection back to pool;
         Without pool, send the quit message and close the socket
         """
-        if self._pool:
+        if self._pool is not None:
             self._pool.put_connection(self)
         else:
             pymysql.connections.Connection.close(self)
+    
+    def ping(self, reconnect=True):
+        """
+        Overwrite the ping() method of pymysql.connections.Connection
+        Check if the server is alive.
+        :param reconnect: If the connection is closed, reconnect.
+        :type reconnect: boolean
+        :raise Error: If the connection is closed and reconnect=False.
+        """
+        if self._sock is None:
+            if reconnect:
+                self.connect()
+                reconnect = False
+            else:
+                raise pymysql.err.Error("Already closed")
+        try:
+            self._execute_command(pymysql.constants.COMMAND.COM_PING, "")
+            self._read_ok_packet()
+        except Exception:
+            if reconnect:
+                # here add action to deal the old/broken connection in pool
+                if self._pool is not None:
+                    logger.debug('Connection had broken in pool(%s), reconnect it', self._pool.name)
+                    self._force_close()
+                self.connect()
+                self.ping(False)
+            else:
+                raise
 
     def execute_query(self, query, args=(), dictcursor=False, return_one=False, exec_many=False):
         """
@@ -98,30 +121,48 @@ class ConnectionPool:
     _THREAD_LOCAL = threading.local()
     _THREAD_LOCAL.retry_counter = 0  # a counter used for debug get_connection() method
 
-    def __init__(self, size=10, name=None, *args, **kwargs):
-        self._pool = queue.Queue(self._HARD_LIMIT)
+    def __init__(self, size=10, name=None, pre_create=False, *args, **kwargs):
+        """
+        size: max pool size (int)
+        name: optional pool name (str)
+        pre_create: create all connections the `size` specified at the init phase; otherwise will create connection when really need. Default: False (bool)
+        args & kwargs: same as pymysql.connections.Connection()
+        """
         self._size = size if 0 < size < self._HARD_LIMIT else self._HARD_LIMIT
+        self._pool = queue.Queue(self._size)
         self.name = name if name else '-'.join(
             [kwargs.get('host', 'localhost'), str(kwargs.get('port', 3306)),
              kwargs.get('user', ''), kwargs.get('database', '')])
-        for _ in range(self._size):
-            conn = Connection(*args, **kwargs)
-            conn._pool = self
-            self._pool.put(conn)
+        self._pre_create = pre_create
+        if pre_create:
+            for _ in range(self._size):
+                conn = Connection(*args, **kwargs)
+                conn._pool = self
+                self._pool.put(conn)
+        else:
+            self._args = args
+            self._kwargs = kwargs
 
     def get_connection(self, timeout=1, retry_num=1, pre_ping=False):
         """
         timeout: timeout of get a connection from pool, should be a int(0 means return or raise immediately)
         retry_num: how many times will retry to get a connection
-        pre_ping: before return a connection, send a ping command to the Mysql server via it, if the connection is broken, reconnect it
+        pre_ping: before return a connection, send a ping command to the Mysql server, if the connection is broken, reconnect it
         """
         try:
+            if not self._pre_create:
+                timeout = 0
             conn = self._pool.get(timeout=timeout) if timeout > 0 else self._pool.get_nowait()
             if pre_ping:
                 conn.ping(reconnect=True)
             logger.debug('Get connection from pool(%s)', self.name)
             return conn
         except queue.Empty:
+            if not self._pre_create:
+                logger.debug('Create new connection in pool(%s)', self.name)
+                conn = Connection(*self._args, **self._kwargs)
+                conn._pool = self
+                return conn
             if not hasattr(self._THREAD_LOCAL, 'retry_counter'):
                 self._THREAD_LOCAL.retry_counter = 0
             if retry_num > 0:
@@ -143,6 +184,7 @@ class ConnectionPool:
             self._pool.put_nowait(conn)
             logger.debug("Put connection back to pool(%s)", self.name)
         except queue.Full:
+            conn.close()
             logger.warning("Put connection to pool(%s) error, pool is full, size:%d", self.name, self.size())
 
     def size(self):
