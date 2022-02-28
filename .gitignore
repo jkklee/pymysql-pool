@@ -7,3 +7,5 @@ dist
 build
 eggs
 .idea
+test.py
+*.swp
