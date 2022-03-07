@@ -4,10 +4,10 @@ email: chaoyuemyself@hotmail.com
 """
 import pymysql
 import warnings
-import queue
 import logging
 import threading
 import time
+from collections import deque
 
 __all__ = ['Connection', 'ConnectionPool', 'logger']
 
@@ -118,14 +118,13 @@ class ConnectionPool:
     put a reusable connection back to the pool, etc; also we can create different instance of this class that represent
     different pool of different DB Server or different user
     """
-    _THREAD_LOCAL = threading.local()
-    _THREAD_LOCAL.retry_counter = 0  # a counter used for debug get_connection() method
+    _created_num = deque()  # record the number of all used and available connections(use deque for thread-safe)
 
-    def __init__(self, size=10, max_size=100, name=None, pre_create_num=0, con_lifetime=3600, *args, **kwargs):
+    def __init__(self, size=10, maxsize=100, name=None, pre_create_num=0, con_lifetime=3600, *args, **kwargs):
         """
         size: int
             normal size of the pool
-        max_size: int
+        maxsize: int
             max size for scalability
         name: str
             optional pool name (str)
@@ -138,18 +137,17 @@ class ConnectionPool:
                    resolve the problem of mysql server side close due to 'wait_timeout'
                 2. If connction_number>size, close the connection and remove it from the pool.
                    used for pool scalability.
-            in order for the arg to work as expect: 
+            in order for the arg to work as expect:
                 you should make sure that mysql's 'wait_timeout' variable is greater than the con_lifetime.
             0 or negative means do not consider the lifetime
         args & kwargs:
             same as pymysql.connections.Connection()
         """
         self._size = size
-        self.max_size = max_size
-        self._pool = queue.Queue(max_size)
-        self._pre_create_num = pre_create_num
+        self.maxsize = maxsize
+        self._pool = deque()
+        self._pre_create_num = pre_create_num if pre_create_num <= maxsize else maxsize
         self._con_lifetime = con_lifetime
-        self._total_con_num = 0  # total connections in use or usable
         self._args = args
         self._kwargs = kwargs
         self.name = name if name else '-'.join(
@@ -157,15 +155,15 @@ class ConnectionPool:
              kwargs.get('user', ''), kwargs.get('database', '')])
 
         if pre_create_num > 0:
-            for _ in range(pre_create_num):
+            for _ in range(self._pre_create_num):
                 conn = self._create_connection()
-                self._pool.put(conn)
+                self._pool.appendleft(conn)
                 conn._returned = True
         else:
             self._args = args
             self._kwargs = kwargs
 
-    def get_connection(self, timeout=0.2, retry_num=2, pre_ping=False):
+    def get_connection(self, retry_num=3, retry_interval=0.1, pre_ping=False):
         """
         timeout: int
             timeout of get a connection from pool, should be a int(0 means return or raise immediately)
@@ -174,65 +172,67 @@ class ConnectionPool:
         pre_ping: bool
             before return a connection, send a ping command to the Mysql server, if the connection is broken, reconnect it
         """
+        if retry_num > 10:
+            retry_num = 10  # retry_num hard limit
         try:
-            if not self._pre_create_num > 0:
-                timeout = 0
-            conn = self._pool.get(timeout=timeout) if timeout > 0 else self._pool.get_nowait()
+            conn = self._pool.pop()
+        except IndexError:
+            if self.connection_num < self._size:
+                return self._create_connection()
+            if retry_num > 0:
+                retry_num -= 1
+                time.sleep(retry_interval)
+                logger.debug('Retry to get connection from pool(%s)', self.name)
+                return self.get_connection(retry_num, retry_interval, pre_ping)
+            else:
+                if self.connection_num < self.maxsize:
+                    return self._create_connection()
+                else:
+                    raise GetConnectionFromPoolError("can't get connection from pool({}), retry_num={} retry_interval={}(s)".format(
+                        self.name, retry_num, retry_interval))
+
+        # check con_lifetime
+        if self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime:
+            conn._pool = None
+            try:
+                conn.close()
+            except:
+                conn._force_close()
+            self._created_num.pop()
+            logger.debug("Close connection in pool(%s) due to lifetime reached", self.name)
+            # loss one, create one
+            return self._create_connection()
+        else:
             if pre_ping:
                 conn.ping(reconnect=True)
-            conn._returned = False
-            logger.debug('Get connection from pool(%s)', self.name)
-            return conn
-        except queue.Empty:
-            if self._total_con_num < self._size:
-                return self._create_connection()
-            else:
-                if not hasattr(self._THREAD_LOCAL, 'retry_counter'):
-                    self._THREAD_LOCAL.retry_counter = 0
-                if retry_num > 0:
-                    self._THREAD_LOCAL.retry_counter += 1
-                    logger.debug('Retry to get connection from pool(%s), the %d times', self.name, self._THREAD_LOCAL.retry_counter)
-                    retry_num -= 1
-                    return self.get_connection(timeout, retry_num)
-                else:
-                    # normal pool has used up and even retry mechanism can't get a connection, enhance the pool up to max_size
-                    if self._total_con_num < self.max_size:
-                        self._THREAD_LOCAL.retry_counter = 0
-                        return self._create_connection()
-                    else:
-                        total_times = self._THREAD_LOCAL.retry_counter + 1
-                        self._THREAD_LOCAL.retry_counter = 0
-                        raise GetConnectionFromPoolError("can't get connection from pool({}) within {}*{} second(s)".format(
-                            self.name, timeout, total_times))
+
+        conn._returned = False
+        logger.debug('Get connection from pool(%s)', self.name)
+        return conn
 
     def _put_connection(self, conn):
-        if conn._pool is None:
+        if not hasattr(conn, '_pool') or conn._pool is None:
             return
         conn.cursor().close()
-        try:
-            if not conn._returned:
-                # consider the connection lifetime with the purpose of reduce active connections number
-                if self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime:
-                    conn._pool = None
+        if not conn._returned:
+            # consider the connection lifetime with the purpose of reduce active connections number
+            if self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime:
+                conn._pool = None
+                try:
                     conn.close()
-                    logger.debug("Close connection in pool(%s) due to lifetime reached", self.name)
-                    if self._total_con_num <= self._size:
-                        conn = self._create_connection()
-                        self._pool.put_nowait(conn)
-                        logger.debug("Put connection back to pool(%s)", self.name)
-                    self._total_con_num -= 1
-                else:
-                    self._pool.put_nowait(conn)
-                    logger.debug("Put connection back to pool(%s)", self.name)
-            else:
-                raise ReturnConnectionToPoolError("this connection has already returned to the pool({})".format(self.name))
-        except queue.Full:
-            conn._pool = None
-            conn.close()
-            self._total_con_num -= 1
-            logger.warning("Discard connection due to pool(%s) is full, pool size:%d", self.name, self.size)
-        finally:
+                except:
+                    conn._force_close()
+                self._created_num.pop()
+                logger.debug("Close connection in pool(%s) due to lifetime reached", self.name)
+                if self.connection_num >= self._size:
+                    conn._returned = True
+                    return
+                conn = self._create_connection()
+            self._pool.appendleft(conn)
             conn._returned = True
+            logger.debug("Put connection back to pool(%s)", self.name)
+        else:
+            raise ReturnConnectionToPoolError("this connection has already returned to the pool({})".format(self.name))
 
     def _create_connection(self):
         conn = Connection(*self._args, **self._kwargs)
@@ -241,17 +241,19 @@ class ConnectionPool:
         conn._create_ts = int(time.time())
         # add attr indicate whether the connection has already return to pool, should not use any more
         conn._returned = False
-        self._total_con_num += 1
+        self._created_num.append(1)
         logger.debug('Create new connection in pool(%s)', self.name)
         return conn
 
     @property
     def size(self):
-        return self._pool.qsize()
+        """available connections number for now"""
+        return len(self._pool)
 
     @property
     def connection_num(self):
-        return self._total_con_num
+        """total connections number of all used and available"""
+        return len(self._created_num)
 
 
 class GetConnectionFromPoolError(Exception):
