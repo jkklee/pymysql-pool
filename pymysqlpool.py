@@ -117,7 +117,6 @@ class ConnectionPool:
     put a reusable connection back to the pool, etc; also we can create different instance of this class that represent
     different pool of different DB Server or different user
     """
-    _created_num = deque()  # record the number of all used and available connections(use deque for thread-safe)
 
     def __init__(self, size=10, maxsize=100, name=None, pre_create_num=0, con_lifetime=3600, *args, **kwargs):
         """
@@ -152,6 +151,7 @@ class ConnectionPool:
         self.name = name if name else '-'.join(
             [kwargs.get('host', 'localhost'), str(kwargs.get('port', 3306)),
              kwargs.get('user', ''), kwargs.get('database', '')])
+        self._created_num = deque()  # record the number of all used and available connections(use deque for thread-safe)
 
         if pre_create_num > 0:
             for _ in range(self._pre_create_num):
@@ -187,7 +187,7 @@ class ConnectionPool:
                 if self.connection_num < self.maxsize:
                     return self._create_connection()
                 else:
-                    raise GetConnectionFromPoolError("can't get connection from pool({}), retry_num={} retry_interval={}(s)".format(
+                    raise GetConnectionFromPoolError("can't get connection from pool({}), retry_interval={}(s)".format(
                         self.name, retry_num, retry_interval))
 
         # check con_lifetime
