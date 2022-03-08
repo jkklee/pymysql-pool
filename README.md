@@ -1,78 +1,103 @@
-# PyMySQL_Connection_Pool
-A simple connection pool based on PyMySQL. It is mainly focused on **multi-thread** mode while using `pymysql` but also compatible with single-thread mode for convenience when you need to use these two modes together. Within multi thread-mode support the multiplexing similar feature (while using the connection with the `Context Manager Protocol`).
+# PyMySQL Connection Pool
+A simple but not simple mysql connection pool based on `PyMySQL`.
 
 ## The problem to solve
-While using pymysql with python multithreading generally we will face the questions:  
-    1. It can't share a connection created by main thread with all sub-threads. It will result in the following error:  
+While using pymysql with python multithreading, generally we will face the questions:  
+1. It can't share a connection created by main thread with all sub-threads. It will result in the following error:  
     `pymysql.err.InternalError: Packet sequence number wrong - got 0 expected 1`  
-    2. If we make every sub-thread to create a connection and close it when this sub-thread ends that's workable but obviously lead to high cost on establishing connections with MySQL.
+2. If we make every sub-thread to create a connection and close it when this sub-thread ends that's workable but obviously lead to high cost on establishing connections with MySQL.
 
-So I implemented this module aimed to create as least connections as possible with MySQL in multi-thread programing. 
+## Features
+1. Simple: just use it, there is no extra learning costs.
+2. Performance: almost no extra load compared to the original PyMysql.
+3. Flexible: pre_create connection or just create when really need; normal pool size and max pool size for the scalability, it all depends on you. 
+4. Thoughtful: `connection lifetime` and `pre_ping` mechanism, in case of borrow a brokend connection from the pool(such as closed by the mysql server due to `wait_timeout` setting). 
 
-## Take a glance
+## Basic components
 This module contains two classes: 
-- `Connection` class is a subclass of `pymysql.connections.Connection`. It can be used with or without a connection_pool, **It's supposed to be used in the exact same way as the pymysql's Connection class**. The details of connection pool's implementation is hiddened (when used with a connection_pool additional actions are needed to maintain the pool).  
-This class also provides a wrapped execute_query() method for convenience. It takes several arguments.
-- `ConnectionPool`'s instance represents the actual connection_pool.
+- `Connection` class: this is a subclass of `pymysql.connections.Connection`. It can be used with or without a connection_pool, **It used in the exact same way as pymysql**. The details implementation of connection pool is hiddened (when used with a connection_pool additional actions are needed to maintain the pool).  
+- `ConnectionPool` class: instance of this class represents the actual connection_pool.
 
-## Usage example
-### Installation
-```
-pip install pymysql-pool
-```
-### multi-thread mode:  
-The main difference with single-thread mode is that we should maintain the status of the pool. Such as 'get connection from pool' or 'put connection back to pool', in which case there are also some special cases to deal with such as: 
-- when getting a connection from a pool: we should deal with the **timeout** and **retry** parameters
-- when putting a connection back to pool: if we the queries were executed without exceptions, this connection can be putted back to the pool directly; but if **exception** occurred we have to decide whether this connection should be putted back to the pool depending on if it is **reusable** (it depends on the exception type). If the connection shouldn't be putted back to pool we have to close it and **recreate** a new connection and then put it to the pool.
+## Misc
+Using the concept of connection pool, there are also some aspects should be considered except the core features, such as:
+
+- when getting connection from a pool: we should deal with the **retry_num** and **retry_interval** parameters，in order to give the borrower more chance and don't return the `GetConnectionFromPoolError` error directly.
+- when putting connection back to pool: if the queries executed without exceptions, this connection can be putted back to the pool directly; but if **exception** occurred we have to decide whether this connection should be putted back to the pool depending on if it is **reusable** (depends on the exception type).
 
 Luckily, this module will take care of these complicated details for you automaticly.
 
 It also allows to create more than one connection_pool (with distinct `ConnectionPool.name` attribute) to be associated with different databases.
 
-In the example below we're going to see how it works with the connection_pool feature:   
+## Usage example
+#### Installation
 ```
->>> import pymysqlpool
->>> pymysqlpool.logger.setLevel('DEBUG')
->>> config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'autocommit':True}
-
-### Create a connection pool with 2 connections in it
->>> pool1 = pymysqlpool.ConnectionPool(size=2, name='pool1', **config)
->>> pool1.size()
-2
->>> con1 = pool1.get_connection()
-2017-12-25 21:38:48    DEBUG: Get connection from pool(pool1)
->>> con2 = pool1.get_connection()
-2017-12-25 21:38:51    DEBUG: Get connection from pool(pool1)
->>> pool1.size()
-0
-
-### We can prophesy that some exception will occur here because the pool1 is empty
->>> con3 = pool1.get_connection(timeout=0, retry_num=0)
-Traceback (most recent call last):
-  File "e:\github\pymysql-pool\pymysqlpool.py", line 115, in get_connection
-    conn = self._pool.get(timeout=timeout) if timeout > 0 else self._pool.get_nowait()
-queue.Empty
-
-During handling of the above exception another exception occurred:
-
-Traceback (most recent call last):
-  File "<pyshell#37>", line 1, in <module>
-    con3 = pool1.get_connection(timeout=0, retry_num=0)
-  File "e:\github\pymysql-pool\pymysqlpool.py", line 128, in get_connection
-    self.name, timeout, total_times))
-pymysqlpool.GetConnectionFromPoolError: can't get connection from pool(pool1) within 0*1 second(s)
-
-### Now let's see the connection's behavior while calling close() method and while using it with Context Manager Protocol
->>> con1.close()
-2017-12-25 21:39:56    DEBUG: Put connection back to pool(pool1)
->>> with con1 as cur:
-	cur.execute('select 1+1')
-
-1
-2017-12-25 21:40:25    DEBUG: Put connection back to pool(pool1)
-### We can see that the module maintains the pool appropriately when (and only when) we call the close() method or use the Context Manager Protocol of the connection object.
+pip install pymysql-pool
 ```
 
-**NOTE 1:** We should always use either the close() method or Context Manager Protocol of the connection object. Otherwise the pool will exhaust soon.  
-**NOTE 2:** The Context Manager Protocol is preferred. It can achieve an effect similar to the "multiplexing".  
-**NOTE 3:** While using the close() method be careful to never use a connection object's close() method more than one time (you know why~).
+In the example below we're going to see how it works:  
+
+1. Create a pool with base/normal size is 2 and max size is 3, with pre_create_num=2 means will create 2 connections in the init phase:
+    ```
+    >>> import pymysqlpool
+    >>> pymysqlpool.logger.setLevel('DEBUG')
+    >>> config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'autocommit':True}
+
+    >>> pool1 = pymysqlpool.ConnectionPool(size=2, maxsize=3, pre_create_num=2, name='pool1', **config)
+    03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
+    03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
+    >>> pool1.size
+    2
+
+    >>> con1 = pool1.get_connection()
+    12-25 21:38:48    DEBUG: Get connection from pool(pool1)
+    >>> con2 = pool1.get_connection()
+    12-25 21:38:51    DEBUG: Get connection from pool(pool1)
+    >>> pool1.size
+    0
+    ```
+2. Now the pool is empty, and we still borrow a connection from it, with the default parameters of get_connection(), we will see :
+    ```
+    >>> con3=pool1.get_connection()
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
+    03-08 15:57:33    DEBUG: Create new connection in pool(pool1)
+    ```
+    above message show us: although pool is empty, but the max size isn't reached, so after several times retry, a new connection is create(now max size of  pool is reached)
+
+3. Let's try to get another connection from pool:
+
+    ```
+    >>> con4=pool1.get_connection()
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
+    Traceback (most recent call last):
+    File "/Users/kai/github/pymysql-pool/pymysqlpool.py", line 176, in get_connection
+        conn = self._pool.pop()
+    IndexError: pop from an empty deque
+
+    ... ...
+
+    pymysqlpool.GetConnectionFromPoolError: can't get connection from pool(pool1), retry_interval=0.1(s)
+    ```
+    we can see that after several times retry, finally raise a exception `GetConnectionFromPoolError`
+
+4. Now let's see the connection's behavior while calling close() method or using it with Context Manager Protocol
+
+    ```
+    >>> con1.close()
+    2017-12-25 21:39:56    DEBUG: Put connection back to pool(pool1)
+    >>> with con1 as cur:
+	    cur.execute('select 1+1')
+
+    1
+    2017-12-25 21:40:25    DEBUG: Put connection back to pool(pool1)
+    >>> pool1.size
+    2  # as we expect
+We can see that the module maintains the pool appropriately when (and only when) we call the close() method or use the Context Manager Protocol of the connection object.
+
+## Note
+1. We should always use either the close() method or Context Manager Protocol of the connection object. Otherwise the pool will exhaust soon.
+
+2. The `Context Manager Protocol` is preferred. It can achieve an effect similar to the "multiplexing", means the more Fine-Grained use of pool, also do more with less connections.
