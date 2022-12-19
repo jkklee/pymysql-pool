@@ -91,7 +91,7 @@ class Connection(pymysql.connections.Connection):
             else:
                 raise
 
-    def execute_query(self, query, args=(), dictcursor=False, return_one=False, exec_many=False):
+    def execute_query(self, query, args=(), dictcursor=False, return_one=False, exec_many=False, return_lastrowid=False):
         """
         A wrapped method of pymysql's execute() or executemany().
         dictcursor: whether want use the dict cursor(cursor's default type is tuple)
@@ -107,8 +107,12 @@ class Connection(pymysql.connections.Connection):
                     cur.execute(query, args)
             except Exception:
                 raise
-            # if no record match the query, return () if return_one==False, else return None
-            return cur.fetchone() if return_one else cur.fetchall()
+            if return_lastrowid:
+                return cur.fetchone() if return_one else cur.fetchall(
+                ), cur.lastrowid
+            else:
+                # if no record match the query, return () if return_one==False, else return None
+                return cur.fetchone() if return_one else cur.fetchall()
 
 
 class ConnectionPool:
