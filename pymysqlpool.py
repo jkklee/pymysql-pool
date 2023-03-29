@@ -12,9 +12,20 @@ __all__ = ['Connection', 'ConnectionPool', 'logger']
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
 # use logging module for easy debug
-logging.basicConfig(format='%(asctime)s %(levelname)8s: %(message)s', datefmt='%m-%d %H:%M:%S')
-logger = logging.getLogger(__name__)
-logger.setLevel('WARNING')
+def _init_logger():
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler()
+    handler.setFomatter(
+        logging.Formatter(
+            fmt='%(asctime)s %(levelname)8s: %(message)s',
+            datefmt='%m-%d %H:%M:%S',
+        )
+    )
+    logger.addHandler(handler)
+    logger.setLevel('WARNING')
+
+
+logger = _init_logger()
 
 
 class Connection(pymysql.connections.Connection):
