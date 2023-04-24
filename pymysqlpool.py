@@ -5,21 +5,33 @@ email: chaoyuemyself@hotmail.com
 import pymysql
 import warnings
 import logging
+import functools
+import inspect
 import time
 from collections import deque
 
 __all__ = ['Connection', 'ConnectionPool', 'logger']
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
-# use logging module for easy debug
-logging.basicConfig(format='%(asctime)s %(levelname)8s: %(message)s', datefmt='%m-%d %H:%M:%S')
-logger = logging.getLogger(__name__)
-logger.setLevel('WARNING')
+
+
+def _init_logger(level='WARNING'):
+    # use logging module for easy debug
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(fmt='%(asctime)s %(levelname)8s: %(message)s', datefmt='%m-%d %H:%M:%S'))
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    return logger
+
+
+logger = _init_logger()
 
 
 class Connection(pymysql.connections.Connection):
     """
     Return a connection object with or without connection_pool feature.
+
     This is all the same with pymysql.connections.Connection instance except that with connection_pool feature:
         the __exit__() method additionally put the connection back to it's pool
     """
@@ -30,12 +42,14 @@ class Connection(pymysql.connections.Connection):
         pymysql.connections.Connection.__init__(self, *args, **kwargs)
         self.args = args
         self.kwargs = kwargs
+        self.cursorclass = Cursor
 
     def __exit__(self, exc, value, traceback):
         """
         Overwrite the __exit__() method of pymysql.connections.Connection
+
         Base action: on successful exit, commit. On exception, rollback
-        With pool additional action: put connection back to pool
+        With pool action: put connection back to pool
         """
         if self._pool is not None:
             if not exc or exc in self._reusable_expection:
@@ -55,6 +69,7 @@ class Connection(pymysql.connections.Connection):
     def close(self):
         """
         Overwrite the close() method of pymysql.connections.Connection
+
         With pool, put connection back to pool;
         Without pool, send the quit message and close the socket
         """
@@ -67,6 +82,7 @@ class Connection(pymysql.connections.Connection):
         """
         Overwrite the ping() method of pymysql.connections.Connection
         Check if the server is alive.
+
         :param reconnect: If the connection is closed, reconnect.
         :type reconnect: boolean
         :raise Error: If the connection is closed and reconnect=False.
@@ -93,7 +109,9 @@ class Connection(pymysql.connections.Connection):
 
     def execute_query(self, query, args=(), dictcursor=False, return_one=False, exec_many=False):
         """
+        Deprecated and will remove in the future: please use more friendly Cursor.db_query() and Cursor.db_modify().
         A wrapped method of pymysql's execute() or executemany().
+
         dictcursor: whether want use the dict cursor(cursor's default type is tuple)
         return_one: whether want only one row of the result
         exec_many: whether use pymysql's executemany() method
@@ -109,6 +127,39 @@ class Connection(pymysql.connections.Connection):
                 raise
             # if no record match the query, return () if return_one==False, else return None
             return cur.fetchone() if return_one else cur.fetchall()
+
+
+class Cursor(pymysql.cursors.Cursor):
+    def db_query(self, query, args=()):
+        """
+        A wrapped method of Cursor..fetchone() or Cursor..fetchall() when doing select query.
+        The outer layer of return data is always list(always use cursor.fetchall()), to display data with a unified structure.
+        """
+        # with self:
+        try:
+            # cur = self.cursor(cursorclass) if cursorclass else self.cursor()
+            self.execute(query, args)
+            return self.fetchall()
+        except Exception:
+            raise
+
+    def db_modify(self, query, args=(), exec_many=False):
+        """
+        A wrapped method of Cursor.execute() or Cursor.executemany() when doing modify query.
+        return: {'rowcount': xxx, 'lastrowid': xxx}
+
+        exec_many: whether use executemany() method
+        """
+        # with self:
+        try:
+            # cur = self.cursor()
+            if not exec_many:
+                rt = self.execute(query, args)
+            else:
+                rt = self.executemany(query, args)
+            return {'rowcount': self.rowcount, 'lastrowid': self.lastrowid}
+        except Exception:
+            raise
 
 
 class ConnectionPool:
@@ -261,3 +312,18 @@ class GetConnectionFromPoolError(Exception):
 
 class ReturnConnectionToPoolError(Exception):
     """Exception related can't return connection to pool."""
+
+
+def already_returned_conn(f):
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        # args[0] means self(connection object)
+        if hasattr(args[0], '_returned') and args[0]._returned:
+            raise ReturnConnectionToPoolError("this connection has already returned to the pool({})".format(args[0]._pool.name))
+        return f(*args, **kwargs)
+    return wrapper
+
+
+for name, fn in inspect.getmembers(Connection, inspect.isfunction):
+    if not name.startswith('_'):
+        setattr(Connection, name, already_returned_conn(fn))
