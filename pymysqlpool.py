@@ -14,9 +14,10 @@ __all__ = ['Connection', 'ConnectionPool', 'logger']
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
 
+# use logging module for easy debug
+
 
 def _init_logger(level='WARNING'):
-    # use logging module for easy debug
     logger = logging.getLogger(__name__)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter(fmt='%(asctime)s %(levelname)8s: %(message)s', datefmt='%m-%d %H:%M:%S'))
@@ -215,10 +216,10 @@ class ConnectionPool:
 
     def get_connection(self, retry_num=3, retry_interval=0.1, pre_ping=False):
         """
-        timeout: int
-            timeout of get a connection from pool, should be a int(0 means return or raise immediately)
         retry_num: int
             how many times will retry to get a connection
+        retry_interval: float
+            timeout of get a connection from pool(0 means return or raise immediately)
         pre_ping: bool
             before return a connection, send a ping command to the Mysql server, if the connection is broken, reconnect it
         """
@@ -238,8 +239,7 @@ class ConnectionPool:
                 if self.connection_num < self.maxsize:
                     return self._create_connection()
                 else:
-                    raise GetConnectionFromPoolError("can't get connection from pool({}), retry_interval={}(s)".format(
-                        self.name, retry_num, retry_interval))
+                    raise GetConnectionFromPoolError("can't get connection from pool({}), due to pool lack.".format(self.name))
 
         # check con_lifetime
         if self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime:
@@ -296,12 +296,12 @@ class ConnectionPool:
         return conn
 
     @property
-    def size(self):
+    def available_num(self):
         """available connections number for now"""
         return len(self._pool)
 
     @property
-    def connection_num(self):
+    def total_num(self):
         """total connections number of all used and available"""
         return len(self._created_num)
 
