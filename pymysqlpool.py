@@ -278,8 +278,8 @@ class ConnectionPool:
                     conn._returned = True
                     return
                 conn = self._create_connection()
-            self._pool.appendleft(conn)
             conn._returned = True
+            self._pool.appendleft(conn)
             logger.debug("Put connection back to pool(%s)", self.name)
         else:
             raise ReturnConnectionToPoolError("this connection has already returned to the pool({})".format(self.name))
