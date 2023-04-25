@@ -4,7 +4,7 @@ from setuptools import setup
 readme = 'README.md'
 setup(
     name="pymysql-pool",
-    version="0.4.0",
+    version="0.4.1",
     url="https://github.com/jkklee/pymysql-pool",
     author="ljk",
     py_modules=['pymysqlpool'],
