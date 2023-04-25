@@ -228,7 +228,7 @@ class ConnectionPool:
         try:
             conn = self._pool.pop()
         except IndexError:
-            if self.connection_num < self._size:
+            if self.total_num < self._size:
                 return self._create_connection()
             if retry_num > 0:
                 retry_num -= 1
@@ -236,7 +236,7 @@ class ConnectionPool:
                 logger.debug('Retry to get connection from pool(%s)', self.name)
                 return self.get_connection(retry_num, retry_interval, pre_ping)
             else:
-                if self.connection_num < self.maxsize:
+                if self.total_num < self.maxsize:
                     return self._create_connection()
                 else:
                     raise GetConnectionFromPoolError("can't get connection from pool({}), due to pool lack.".format(self.name))
@@ -274,7 +274,7 @@ class ConnectionPool:
                     conn._force_close()
                 self._created_num.pop()
                 logger.debug("Close connection in pool(%s) due to lifetime reached", self.name)
-                if self.connection_num >= self._size:
+                if self.total_num >= self._size:
                     conn._returned = True
                     return
                 conn = self._create_connection()
