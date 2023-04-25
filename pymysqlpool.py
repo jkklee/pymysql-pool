@@ -43,7 +43,7 @@ class Connection(pymysql.connections.Connection):
         pymysql.connections.Connection.__init__(self, *args, **kwargs)
         self.args = args
         self.kwargs = kwargs
-        self.cursorclass = Cursor
+        #self.cursorclass = Cursor
 
     def __exit__(self, exc, value, traceback):
         """
@@ -242,6 +242,7 @@ class ConnectionPool:
                     raise GetConnectionFromPoolError("can't get connection from pool({}), due to pool lack.".format(self.name))
 
         # check con_lifetime
+        conn._returned = False
         if self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime:
             conn._pool = None
             try:
@@ -256,7 +257,6 @@ class ConnectionPool:
             if pre_ping:
                 conn.ping(reconnect=True)
 
-        conn._returned = False
         logger.debug('Get connection from pool(%s)', self.name)
         return conn
 
