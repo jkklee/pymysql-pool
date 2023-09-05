@@ -327,3 +327,17 @@ def already_returned_conn(f):
 for name, fn in inspect.getmembers(Connection, inspect.isfunction):
     if not name.startswith('_'):
         setattr(Connection, name, already_returned_conn(fn))
+
+
+class ConnectionPoolSingleton:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = cls._create_pool(*args, **kwargs)
+
+        return cls._instance
+
+    @staticmethod
+    def _create_pool(*args, **kwargs):
+        return ConnectionPool(*args, **kwargs)

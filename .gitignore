@@ -9,3 +9,5 @@ eggs
 .idea
 test.py
 *.swp
+
+venv
