@@ -124,7 +124,13 @@ class Connection(pymysql.connections.Connection):
             else:
                 # other type dose not has custom db_query() and db_modify() method
                 return cursor(self)
-        return Cursor(self)
+        else:
+            if self.cursorclass.__name__ == 'DictCursor':
+                return DictCursor(self)
+            elif self.cursorclass.__name__ == 'Cursor':
+                return Cursor(self)
+            else:
+                return self.cursorclass(self)
 
 
 class Cursor(pymysql.cursors.Cursor):
