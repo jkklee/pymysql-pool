@@ -45,14 +45,14 @@ In the example below we're going to see how it works:
     >>> pool1 = pymysqlpool.ConnectionPool(size=2, maxsize=3, pre_create_num=2, name='pool1', **config)
     03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
     03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
-    >>> pool1.size
+    >>> pool1.total_num
     2
 
     >>> con1 = pool1.get_connection()
     12-25 21:38:48    DEBUG: Get connection from pool(pool1)
     >>> con2 = pool1.get_connection()
     12-25 21:38:51    DEBUG: Get connection from pool(pool1)
-    >>> pool1.size
+    >>> pool1.available_num
     0
     ```
 2. Now the pool is empty, and we still borrow a connection from it, with the default parameters of get_connection(), we will see :
@@ -93,13 +93,13 @@ In the example below we're going to see how it works:
 
     1
     2017-12-25 21:40:25    DEBUG: Put connection back to pool(pool1)
-    >>> pool1.size
+    >>> pool1.total_num
     2  # as we expect
 We can see that the module maintains the pool appropriately when (and only when) we call the close() method or use the Context Manager Protocol of the connection object.
 
 ## Simple benchmark
-I did a simple benchmark, focusing on the performance impact of the "extra" `get` and `return` operations in this module.
-The test logic is in the `simple-benchmark.py`, You can check and do it yourself.
+I did a simple benchmark, focusing on the performance impact of the "extra" `get` and `return` operations in this module.  
+The test logic is in the `simple-benchmark.py`, You can check and do it yourself.  
 Below is my test(loop 50000 )
 ```
 # 'pymysql-one-conn' is the best performing scenario, native pymysql, and all queries are done within a single connection
@@ -130,7 +130,7 @@ total 50000 finish within 6.999s.
 total 50000 finish within 6.968s.
 7175.65 queries per second, avg 0.14 ms per query
 ```
-As we can see that one time `get` plus `return` operation takes only 0.01ms.
+As we can see that one time `get` plus `return` operation only takes about 0.01ms.
 
 ## Note
 1. We should always use either the close() method or Context Manager Protocol of the connection object. Otherwise the pool will exhaust soon.
