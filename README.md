@@ -9,7 +9,7 @@ While using pymysql with python multithreading, generally we will face the quest
 
 ## Features
 1. Simple: just use it, there is no extra learning costs.
-2. Performance: almost no extra load compared to the original PyMysql.
+2. Performance: almost no extra load compared to the original PyMysql([simple benchmark](https://github.com/jkklee/pymysql-pool#simple-benchmark)).
 3. Flexible: pre_create connection or just create when really need; normal pool size and max pool size for the scalability, it all depends on you. 
 4. Thoughtful: `connection lifetime` and `pre_ping` mechanism, in case of borrow a brokend connection from the pool(such as closed by the mysql server due to `wait_timeout` setting). 
 
@@ -96,6 +96,41 @@ In the example below we're going to see how it works:
     >>> pool1.size
     2  # as we expect
 We can see that the module maintains the pool appropriately when (and only when) we call the close() method or use the Context Manager Protocol of the connection object.
+
+## Simple benchmark
+I did a simple benchmark, focusing on the performance impact of the "extra" `get` and `return` operations in this module.
+The test logic is in the `simple-benchmark.py`, You can check and do it yourself.
+Below is my test(loop 50000 )
+```
+# 'pymysql-one-conn' is the best performing scenario, native pymysql, and all queries are done within a single connection
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.564s.
+7616.86 queries per second, avg 0.13 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.647s.
+7522.31 queries per second, avg 0.13 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.558s.
+7623.71 queries per second, avg 0.13 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.737s.
+7421.67 queries per second, avg 0.13 ms per query
+
+# 'pymysql-pool' uses connection pool (as long as the pool is greater than 1, it doesn't matter because the test logic is executed sequentially in a for loop).
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 6.999s.
+7143.77 queries per second, avg 0.14 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 7.066s.
+7076.48 queries per second, avg 0.14 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 6.999s.
+7143.71 queries per second, avg 0.14 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 6.968s.
+7175.65 queries per second, avg 0.14 ms per query
+```
+As we can see that one time `get` plus `return` operation takes only 0.01ms.
 
 ## Note
 1. We should always use either the close() method or Context Manager Protocol of the connection object. Otherwise the pool will exhaust soon.
