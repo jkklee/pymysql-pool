@@ -198,7 +198,7 @@ class ConnectionPool:
                 2. If connction_number>size, close the connection and remove it from the pool.
                    used for pool scalability.
             in order for the arg to work as expect:
-                you should make sure that mysql's 'wait_timeout' variable is greater than the con_lifetime.
+                you should make sure that 'con_lifetime' is less than mysql's 'wait_timeout' variable.
             0 or negative means do not consider the lifetime
         args & kwargs:
             same as pymysql.connections.Connection()
