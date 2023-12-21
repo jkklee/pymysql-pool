@@ -1,5 +1,7 @@
 # PyMySQL 连接池
 
+[English Doc](https://github.com/jkklee/pymysql-pool/blob/master/README.md)
+
 一个用于 Python 的数据库链接池模块，基于 PyMySQL。精心设计、使用简单、定位小而美。
 
 ## 要解决的问题

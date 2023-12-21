@@ -1,4 +1,7 @@
 # PyMySQL Connection Pool
+
+[中文文档](https://github.com/jkklee/pymysql-pool/blob/master/README_zh.md)
+
 A simple but not simple mysql connection pool based on `PyMySQL`.
 
 ## The problem to solve
@@ -42,36 +45,36 @@ In the example below we're going to see how it works:
     >>> pymysqlpool.logger.setLevel('DEBUG')
     >>> config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'autocommit':True}
 
-    >>> pool1 = pymysqlpool.ConnectionPool(size=2, maxsize=3, pre_create_num=2, name='pool1', **config)
-    03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
-    03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
-    >>> pool1.total_num
+    >>> mypool = pymysqlpool.ConnectionPool(size=2, maxsize=3, pre_create_num=2, name='mypool', **config)
+    03-08 15:54:50    DEBUG: Create new connection in pool(mypool)
+    03-08 15:54:50    DEBUG: Create new connection in pool(mypool)
+    >>> mypool.total_num
     2
 
-    >>> con1 = pool1.get_connection()
-    12-25 21:38:48    DEBUG: Get connection from pool(pool1)
-    >>> con2 = pool1.get_connection()
-    12-25 21:38:51    DEBUG: Get connection from pool(pool1)
-    >>> pool1.available_num
+    >>> con1 = mypool.get_connection()
+    12-25 21:38:48    DEBUG: Get connection from pool(mypool)
+    >>> con2 = mypool.get_connection()
+    12-25 21:38:51    DEBUG: Get connection from pool(mypool)
+    >>> mypool.available_num
     0
     ```
 2. Now the pool is empty, and we still borrow a connection from it, with the default parameters of get_connection(), we will see :
     ```
-    >>> con3=pool1.get_connection()
-    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
-    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
-    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
-    03-08 15:57:33    DEBUG: Create new connection in pool(pool1)
+    >>> con3=mypool.get_connection()
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(mypool)
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(mypool)
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(mypool)
+    03-08 15:57:33    DEBUG: Create new connection in pool(mypool)
     ```
     above message show us: although pool is empty, but the max size isn't reached, so after several times retry, a new connection is create(now max size of  pool is reached)
 
 3. Let's try to get another connection from pool:
 
     ```
-    >>> con4=pool1.get_connection()
-    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
-    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
-    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
+    >>> con4=mypool.get_connection()
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(mypool)
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(mypool)
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(mypool)
     Traceback (most recent call last):
     File "/Users/kai/github/pymysql-pool/pymysqlpool.py", line 176, in get_connection
         conn = self._pool.pop()
@@ -79,7 +82,7 @@ In the example below we're going to see how it works:
 
     ... ...
 
-    pymysqlpool.GetConnectionFromPoolError: can't get connection from pool(pool1), retry_interval=0.1(s)
+    pymysqlpool.GetConnectionFromPoolError: can't get connection from pool(mypool), retry_interval=0.1(s)
     ```
     we can see that after several times retry, finally raise a exception `GetConnectionFromPoolError`
 
@@ -87,13 +90,16 @@ In the example below we're going to see how it works:
 
     ```
     >>> con1.close()
-    2017-12-25 21:39:56    DEBUG: Put connection back to pool(pool1)
-    >>> with con1 as cur:
-	    cur.execute('select 1+1')
+    2017-12-25 21:39:56    DEBUG: Put connection back to pool(mypool)
+    >>> with con2:
+            with con2.cursor() as cur:
+                cur.execute('select 1+1')
 
     1
-    2017-12-25 21:40:25    DEBUG: Put connection back to pool(pool1)
-    >>> pool1.total_num
+    12-20 22:44:37    DEBUG: Put connection back to pool(mypool)
+    >>> mypool.total_num
+    3  # as we expect
+    >>> mypool.available_num
     2  # as we expect
 We can see that the module maintains the pool appropriately when (and only when) we call the close() method or use the Context Manager Protocol of the connection object.
 
@@ -133,6 +139,6 @@ total 50000 finish within 6.968s.
 As we can see that one time `get` plus `return` operation only takes about 0.01ms.
 
 ## Note
-1. We should always use either the close() method or Context Manager Protocol of the connection object. Otherwise the pool will exhaust soon.
+1. We should always use either the `close()` method or `Context Manager Protocol` of the connection object. Otherwise the pool will exhaust soon.
 
 2. The `Context Manager Protocol` is preferred. It can achieve an effect similar to the "multiplexing", means the more Fine-Grained use of pool, also do more with less connections.
