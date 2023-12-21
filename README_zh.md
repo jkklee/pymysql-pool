@@ -15,7 +15,7 @@
 ## 特点
 
 1. 简单: 没有额外的学习成本。
-2. 性能: 与原生的 PyMysql(简单基准)相比，本模块由于维护连接池而带来的开销非常小。[简单基准测试](https://github.com/jkklee/pymysql-pool#simple-benchmark)。
+2. 性能: 与原生的 PyMysql(简单基准)相比，本模块由于维护连接池而带来的开销非常小。[简单基准测试](https://github.com/jkklee/pymysql-pool/blob/master/README_zh.md#%E5%9F%BA%E5%87%86%E6%B5%8B%E8%AF%95)。
 3. 灵活: 预先创建连接或在真正需要时创建;普通池大小和最大池大小对于可伸缩性，这完全取决于你。
 4. 周到: 包含重试机制，以及`connection lifetime`和`pre_ping`机制--以防从连接池中借用一个已断开的连接(例如，MySQL 服务器由于`wait_timeout`设置而关闭)。
 
