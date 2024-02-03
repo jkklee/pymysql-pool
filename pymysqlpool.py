@@ -54,7 +54,6 @@ class Connection(pymysql.connections.Connection):
         if self._pool is not None:
             if not exc or exc in self._reusable_expection:
                 '''reusable connection'''
-                self.rollback()
                 self._pool._put_connection(self)
             else:
                 '''no reusable connection, close it and create a new one put to the pool'''
@@ -273,6 +272,7 @@ class ConnectionPool:
         if not hasattr(conn, '_pool') or conn._pool is None:
             return
         conn.cursor().close()
+        conn.rollback()
         if not conn._returned:
             # consider the connection lifetime with the purpose of reduce active connections number
             if self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime:
