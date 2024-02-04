@@ -272,17 +272,22 @@ class ConnectionPool:
         if not hasattr(conn, '_pool') or conn._pool is None:
             return
         conn.cursor().close()
-        conn.rollback()
         if not conn._returned:
+            rollback_failed = False
+            try:
+                conn.rollback()
+            except:
+                rollback_failed = True
+
             # consider the connection lifetime with the purpose of reduce active connections number
-            if self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime:
+            if rollback_failed or (self._con_lifetime > 0 and int(time.time()) - conn._create_ts >= self._con_lifetime):
                 conn._pool = None
                 try:
                     conn.close()
                 except:
                     conn._force_close()
                 self._created_num.pop()
-                logger.debug("Close connection in pool(%s) due to lifetime reached", self.name)
+                logger.debug("Close connection in pool(%s) due to lifetime reached or rollback failure", self.name)
                 if self.total_num >= self._size:
                     conn._returned = True
                     return
