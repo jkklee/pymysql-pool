@@ -1,4 +1,7 @@
 # PyMySQL Connection Pool
+
+[中文文档](https://github.com/jkklee/pymysql-pool/blob/master/README_zh.md)
+
 A simple but not simple mysql connection pool based on `PyMySQL`.
 
 ## The problem to solve
@@ -9,7 +12,7 @@ While using pymysql with python multithreading, generally we will face the quest
 
 ## Features
 1. Simple: just use it, there is no extra learning costs.
-2. Performance: almost no extra load compared to the original PyMysql.
+2. Performance: almost no extra load compared to the original PyMysql([simple benchmark](https://github.com/jkklee/pymysql-pool#simple-benchmark)).
 3. Flexible: pre_create connection or just create when really need; normal pool size and max pool size for the scalability, it all depends on you. 
 4. Thoughtful: `connection lifetime` and `pre_ping` mechanism, in case of borrow a brokend connection from the pool(such as closed by the mysql server due to `wait_timeout` setting). 
 
@@ -42,36 +45,36 @@ In the example below we're going to see how it works:
     >>> pymysqlpool.logger.setLevel('DEBUG')
     >>> config={'host':'xxxx', 'user':'xxx', 'password':'xxx', 'database':'xxx', 'autocommit':True}
 
-    >>> pool1 = pymysqlpool.ConnectionPool(size=2, maxsize=3, pre_create_num=2, name='pool1', **config)
-    03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
-    03-08 15:54:50    DEBUG: Create new connection in pool(pool1)
-    >>> pool1.size
+    >>> mypool = pymysqlpool.ConnectionPool(size=2, maxsize=3, pre_create_num=2, name='mypool', **config)
+    03-08 15:54:50    DEBUG: Create new connection in pool(mypool)
+    03-08 15:54:50    DEBUG: Create new connection in pool(mypool)
+    >>> mypool.total_num
     2
 
-    >>> con1 = pool1.get_connection()
-    12-25 21:38:48    DEBUG: Get connection from pool(pool1)
-    >>> con2 = pool1.get_connection()
-    12-25 21:38:51    DEBUG: Get connection from pool(pool1)
-    >>> pool1.size
+    >>> con1 = mypool.get_connection()
+    12-25 21:38:48    DEBUG: Get connection from pool(mypool)
+    >>> con2 = mypool.get_connection()
+    12-25 21:38:51    DEBUG: Get connection from pool(mypool)
+    >>> mypool.available_num
     0
     ```
 2. Now the pool is empty, and we still borrow a connection from it, with the default parameters of get_connection(), we will see :
     ```
-    >>> con3=pool1.get_connection()
-    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
-    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
-    03-08 15:57:32    DEBUG: Retry to get connection from pool(pool1)
-    03-08 15:57:33    DEBUG: Create new connection in pool(pool1)
+    >>> con3=mypool.get_connection()
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(mypool)
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(mypool)
+    03-08 15:57:32    DEBUG: Retry to get connection from pool(mypool)
+    03-08 15:57:33    DEBUG: Create new connection in pool(mypool)
     ```
     above message show us: although pool is empty, but the max size isn't reached, so after several times retry, a new connection is create(now max size of  pool is reached)
 
 3. Let's try to get another connection from pool:
 
     ```
-    >>> con4=pool1.get_connection()
-    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
-    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
-    03-08 16:29:43    DEBUG: Retry to get connection from pool(pool1)
+    >>> con4=mypool.get_connection()
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(mypool)
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(mypool)
+    03-08 16:29:43    DEBUG: Retry to get connection from pool(mypool)
     Traceback (most recent call last):
     File "/Users/kai/github/pymysql-pool/pymysqlpool.py", line 176, in get_connection
         conn = self._pool.pop()
@@ -79,7 +82,7 @@ In the example below we're going to see how it works:
 
     ... ...
 
-    pymysqlpool.GetConnectionFromPoolError: can't get connection from pool(pool1), retry_interval=0.1(s)
+    pymysqlpool.GetConnectionFromPoolError: can't get connection from pool(mypool), retry_interval=0.1(s)
     ```
     we can see that after several times retry, finally raise a exception `GetConnectionFromPoolError`
 
@@ -87,17 +90,55 @@ In the example below we're going to see how it works:
 
     ```
     >>> con1.close()
-    2017-12-25 21:39:56    DEBUG: Put connection back to pool(pool1)
-    >>> with con1 as cur:
-	    cur.execute('select 1+1')
+    2017-12-25 21:39:56    DEBUG: Put connection back to pool(mypool)
+    >>> with con2:
+            with con2.cursor() as cur:
+                cur.execute('select 1+1')
 
     1
-    2017-12-25 21:40:25    DEBUG: Put connection back to pool(pool1)
-    >>> pool1.size
+    12-20 22:44:37    DEBUG: Put connection back to pool(mypool)
+    >>> mypool.total_num
+    3  # as we expect
+    >>> mypool.available_num
     2  # as we expect
 We can see that the module maintains the pool appropriately when (and only when) we call the close() method or use the Context Manager Protocol of the connection object.
 
+## Simple benchmark
+I did a simple benchmark, focusing on the performance impact of the "extra" `get` and `return` operations in this module.  
+The test logic is in the `simple-benchmark.py`, You can check and do it yourself.  
+Below is my test(loop 50000 )
+```
+# 'pymysql-one-conn' is the best performing scenario, native pymysql, and all queries are done within a single connection
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.564s.
+7616.86 queries per second, avg 0.13 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.647s.
+7522.31 queries per second, avg 0.13 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.558s.
+7623.71 queries per second, avg 0.13 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-one-conn 50000
+total 50000 finish within 6.737s.
+7421.67 queries per second, avg 0.13 ms per query
+
+# 'pymysql-pool' uses connection pool (as long as the pool is greater than 1, it doesn't matter because the test logic is executed sequentially in a for loop).
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 6.999s.
+7143.77 queries per second, avg 0.14 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 7.066s.
+7076.48 queries per second, avg 0.14 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 6.999s.
+7143.71 queries per second, avg 0.14 ms per query
+➜  pymysql-pool ✗ python3 simple-benchmark.py pymysql-pool 50000
+total 50000 finish within 6.968s.
+7175.65 queries per second, avg 0.14 ms per query
+```
+As we can see that one time `get` plus `return` operation only takes about 0.01ms.
+
 ## Note
-1. We should always use either the close() method or Context Manager Protocol of the connection object. Otherwise the pool will exhaust soon.
+1. We should always use either the `close()` method or `Context Manager Protocol` of the connection object. Otherwise the pool will exhaust soon.
 
 2. The `Context Manager Protocol` is preferred. It can achieve an effect similar to the "multiplexing", means the more Fine-Grained use of pool, also do more with less connections.

@@ -10,7 +10,7 @@ import inspect
 import time
 from collections import deque
 
-__all__ = ['Connection', 'ConnectionPool', 'logger']
+__all__ = ['Connection', 'ConnectionPool', 'ConnectionPoolSingleton', 'logger']
 
 warnings.filterwarnings('error', category=pymysql.err.Warning)
 
@@ -107,33 +107,36 @@ class Connection(pymysql.connections.Connection):
                 self.ping(False)
             else:
                 raise
-
-    def execute_query(self, query, args=(), dictcursor=False, return_one=False, exec_many=False):
+    
+    def cursor(self, cursor=None):
         """
-        Deprecated and will remove in the future: please use more friendly Cursor.db_query() and Cursor.db_modify().
-        A wrapped method of pymysql's execute() or executemany().
+        Create a new cursor to execute queries with.
 
-        dictcursor: whether want use the dict cursor(cursor's default type is tuple)
-        return_one: whether want only one row of the result
-        exec_many: whether use pymysql's executemany() method
+        :param cursor: The type of cursor to create. None means use Cursor.
+        :type cursor: :py:class:`Cursor`, :py:class:`SSCursor`, :py:class:`DictCursor`,
+            or :py:class:`SSDictCursor`.
         """
-        with self:
-            cur = self.cursor() if not dictcursor else self.cursor(pymysql.cursors.DictCursor)
-            try:
-                if exec_many:
-                    cur.executemany(query, args)
-                else:
-                    cur.execute(query, args)
-            except Exception:
-                raise
-            # if no record match the query, return () if return_one==False, else return None
-            return cur.fetchone() if return_one else cur.fetchall()
+        if cursor:
+            if cursor.__name__ == 'DictCursor':
+                return DictCursor(self)  # custom DictCursor class in this module
+            elif cursor.__name__ == 'Cursor':
+                return Cursor(self)  # custom Cursor class in this module
+            else:
+                # other type dose not has custom db_query() and db_modify() method
+                return cursor(self)
+        else:
+            if self.cursorclass.__name__ == 'DictCursor':
+                return DictCursor(self)
+            elif self.cursorclass.__name__ == 'Cursor':
+                return Cursor(self)
+            else:
+                return self.cursorclass(self)
 
 
 class Cursor(pymysql.cursors.Cursor):
     def db_query(self, query, args=()):
         """
-        A wrapped method of Cursor..fetchone() or Cursor..fetchall() when doing select query.
+        A wrapped method of Cursor.fetchone() or Cursor.fetchall() when doing select query.
         The outer layer of return data is always list(always use cursor.fetchall()), to display data with a unified structure.
         """
         # with self:
@@ -163,6 +166,13 @@ class Cursor(pymysql.cursors.Cursor):
             raise
 
 
+class DictCursor(pymysql.cursors.DictCursorMixin, Cursor):
+    """
+    A cursor which returns results as a dictionary
+    Inheritance from the custom Cursor class
+    """
+
+
 class ConnectionPool:
     """
     Return connection_pool object, which has method can get connection from a pool with timeout and retry feature;
@@ -188,7 +198,7 @@ class ConnectionPool:
                 2. If connction_number>size, close the connection and remove it from the pool.
                    used for pool scalability.
             in order for the arg to work as expect:
-                you should make sure that mysql's 'wait_timeout' variable is greater than the con_lifetime.
+                you should make sure that 'con_lifetime' is less than mysql's 'wait_timeout' variable.
             0 or negative means do not consider the lifetime
         args & kwargs:
             same as pymysql.connections.Connection()
@@ -330,3 +340,11 @@ def already_returned_conn(f):
 for name, fn in inspect.getmembers(Connection, inspect.isfunction):
     if not name.startswith('_'):
         setattr(Connection, name, already_returned_conn(fn))
+
+
+class ConnectionPoolSingleton(ConnectionPool):
+    _instance = None
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = ConnectionPool.__new__(cls)
+        return cls._instance
