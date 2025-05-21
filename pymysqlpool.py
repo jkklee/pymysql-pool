@@ -321,12 +321,15 @@ class ConnectionPool:
     def available_num(self):
         """available connections number for now"""
         return len(self._pool)
-
+    
+    size = available_num
+    
     @property
     def total_num(self):
         """total connections number of all used and available"""
         return len(self._created_num)
-
+    
+    connection_num = total_num
 
 class GetConnectionFromPoolError(Exception):
     """Exception related can't get connection from pool within timeout seconds."""
