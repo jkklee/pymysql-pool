@@ -43,7 +43,7 @@ class Connection(pymysql.connections.Connection):
         pymysql.connections.Connection.__init__(self, *args, **kwargs)
         self.args = args
         self.kwargs = kwargs
-        #self.cursorclass = Cursor
+        # self.cursorclass = Cursor
 
     def __exit__(self, exc, value, traceback):
         """
@@ -107,7 +107,7 @@ class Connection(pymysql.connections.Connection):
                 self.ping(False)
             else:
                 raise
-    
+
     def cursor(self, cursor=None):
         """
         Create a new cursor to execute queries with.
@@ -180,7 +180,7 @@ class ConnectionPool:
     different pool of different DB Server or different user
     """
 
-    def __init__(self, size=10, maxsize=100, name=None, pre_create_num=0, con_lifetime=3600, *args, **kwargs):
+    def __init__(self, size=10, maxsize=100, name=None, pre_create_num=0, con_lifetime=3600, autocommit=True, *args, **kwargs):
         """
         size: int
             normal size of the pool
@@ -200,6 +200,11 @@ class ConnectionPool:
             in order for the arg to work as expect:
                 you should make sure that 'con_lifetime' is less than mysql's 'wait_timeout' variable.
             0 or negative means do not consider the lifetime
+        autocommit: bool
+            True: the connection will be automatically committed and set the autocommit attribute of the connection object to True when returned;
+            False: the connection will be automatically rolledback and set the autocommit attribute of the connection object to False when returned;
+            1.This ensures that each connection returned to the connection pool is clean and does not contain unfinished transactions.
+            2.Maintain a consistent autocommit setting to prevent situations where users explicitly set the autocommit attribute of the connection object.
         args & kwargs:
             same as pymysql.connections.Connection()
         """
@@ -208,6 +213,7 @@ class ConnectionPool:
         self._pool = deque()
         self._pre_create_num = pre_create_num if pre_create_num <= maxsize else maxsize
         self._con_lifetime = con_lifetime
+        self._autocommit = autocommit
         self._args = args
         self._kwargs = kwargs
         self.name = name if name else '-'.join(
@@ -288,11 +294,16 @@ class ConnectionPool:
                     conn._returned = True
                     return
                 conn = self._create_connection()
+            if conn.get_autocommit():
+                conn.commit()
+            else:
+                conn.rollback()
+            conn.autocommit(self._autocommit)
             conn._returned = True
             self._pool.appendleft(conn)
             logger.debug("Put connection back to pool(%s)", self.name)
         else:
-            raise ReturnConnectionToPoolError("this connection has already returned to the pool({})".format(self.name))
+            raise ReturnConnectionToPoolError("connection has already returned to the pool({})".format(self.name))
 
     def _create_connection(self):
         conn = Connection(*self._args, **self._kwargs)
@@ -301,6 +312,7 @@ class ConnectionPool:
         conn._create_ts = int(time.time())
         # add attr indicate whether the connection has already return to pool, should not use any more
         conn._returned = False
+        conn.autocommit(self._autocommit)
         self._created_num.append(1)
         logger.debug('Create new connection in pool(%s)', self.name)
         return conn
@@ -341,6 +353,7 @@ for name, fn in inspect.getmembers(Connection, inspect.isfunction):
 
 class ConnectionPoolSingleton(ConnectionPool):
     _instance = None
+
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             cls._instance = ConnectionPool.__new__(cls)
